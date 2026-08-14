@@ -54,16 +54,28 @@ export default function LoginPage() {
   //GOOGLE
   const handleGoogleLogin = async () => {
     setLoadingGoogle(true);
+
     try {
       const result = await loginWithGoogle();
-      if (result && result.success === false) {
+
+      if (!result.success) {
         enqueueSnackbar(result.message, {
           variant: "error",
         });
+        setLoadingGoogle(false);
+        return;
+      }
+
+      if (result.url) {
+        window.location.href = result.url;
       }
     } catch (err) {
-      enqueueSnackbar("Terjadi kesalahan, coba lagi", { variant: "error" });
-    } finally {
+      console.error(err);
+
+      enqueueSnackbar("Terjadi kesalahan, coba lagi", {
+        variant: "error",
+      });
+
       setLoadingGoogle(false);
     }
   };

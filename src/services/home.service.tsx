@@ -12,7 +12,7 @@ export type TransactionForCashFlow = {
 export type HomeData = {
   fullName: string;
   totalBalance: number;
-  transactions: TransactionForCashFlow[]; // raw data, client aggregates
+  transactions: TransactionForCashFlow[];
 };
 
 export async function getHomeData(): Promise<HomeData> {

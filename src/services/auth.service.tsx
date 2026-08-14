@@ -119,12 +119,16 @@ export async function loginWithGoogle() {
       message: "Gagal memulai login dengan Google. Silakan coba lagi.",
     };
   }
+
   if (data.url) {
-    redirect(data.url);
+    return {
+      success: true,
+      url: data.url,
+    };
   }
 
   return {
     success: false,
-    message: "Gagal memulai login dengan Google.",
+    message: "Gagal mendapatkan URL login Google.",
   };
 }
