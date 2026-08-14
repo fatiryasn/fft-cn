@@ -101,3 +101,30 @@ export async function getCurrentProfile() {
     email: user.email,
   };
 }
+
+//LOGIN WITH GOOGLE
+export async function loginWithGoogle() {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/callback`,
+    },
+  });
+
+  if (error) {
+    return {
+      success: false,
+      message: "Gagal memulai login dengan Google. Silakan coba lagi.",
+    };
+  }
+  if (data.url) {
+    redirect(data.url);
+  }
+
+  return {
+    success: false,
+    message: "Gagal memulai login dengan Google.",
+  };
+}

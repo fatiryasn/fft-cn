@@ -8,11 +8,14 @@ import {
   FaPlus,
   FaWallet,
 } from "react-icons/fa";
+import { useRouter } from "next/navigation";
+import { enqueueSnackbar } from "notistack";
 import { createAccount } from "@/services/account.service";
 import Spinner from "@/components/shared/Spinner";
 import FieldError from "@/components/shared/FieldError";
 
 const TambahAkunPage = () => {
+  const router = useRouter();
   const [namaAkun, setNamaAkun] = useState("");
   const [tipeAkun, setTipeAkun] = useState<"cash" | "cashless" | null>(null);
   const [saldoAwal, setSaldoAwal] = useState<number | string>("0");
@@ -20,7 +23,6 @@ const TambahAkunPage = () => {
     namaAkun?: string;
     tipeAkun?: string;
   }>({});
-  const [serverError, setServerError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   //clear
@@ -29,7 +31,6 @@ const TambahAkunPage = () => {
     setTipeAkun(null);
     setSaldoAwal("0");
     setErrors({});
-    setServerError(null);
   };
 
   //handle submit
@@ -60,8 +61,12 @@ const TambahAkunPage = () => {
         });
 
         if (result && result.error) {
-          setServerError(result.error);
+          enqueueSnackbar(result.error, { variant: "error" });
+          return;
         }
+
+        enqueueSnackbar("Akun berhasil ditambahkan", { variant: "success" });
+        router.push("/app/settings/akun-keuangan");
       });
     }
   };
@@ -69,13 +74,6 @@ const TambahAkunPage = () => {
   return (
     <div className="bg-surface shadow rounded-xl border border-gray-200 mx-auto">
       <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6">
-        {/* ERROR */}
-        {serverError && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-xs md:text-sm">
-            {serverError}
-          </div>
-        )}
-
         {/* NAME */}
         <div>
           <label
@@ -94,7 +92,9 @@ const TambahAkunPage = () => {
             maxLength={100}
             className={`w-full px-3 md:px-5 py-2 md:py-3 border rounded-lg shadow focus:outline-none transition text-sm md:text-base border-gray-200`}
           />
-          {errors.namaAkun && <FieldError message={errors.namaAkun} className="pt-1"/>}
+          {errors.namaAkun && (
+            <FieldError message={errors.namaAkun} className="pt-1" />
+          )}
         </div>
 
         {/* TYPE */}
@@ -138,7 +138,9 @@ const TambahAkunPage = () => {
               Cashless
             </button>
           </div>
-          {errors.tipeAkun && <FieldError message={errors.tipeAkun} className="pt-1"/>}
+          {errors.tipeAkun && (
+            <FieldError message={errors.tipeAkun} className="pt-1" />
+          )}
         </div>
 
         {/* INIT BALANCE */}
@@ -169,7 +171,7 @@ const TambahAkunPage = () => {
           </p>
         </div>
 
-        {/* BUTTONS*/}
+        {/* BUTTONS */}
         <div className="flex justify-end gap-2 sm:gap-3 pt-2">
           <button
             type="button"

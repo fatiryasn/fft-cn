@@ -68,6 +68,7 @@ const Page = () => {
 
   //STATES
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterType, setFilterType] = useState<"semua" | "income" | "expense">(
     "semua",
   );
@@ -91,7 +92,7 @@ const Page = () => {
     setError(null);
     try {
       const result = await getCategories({
-        search,
+        search: debouncedSearch,
         type: filterType,
         page: currentPage,
         itemsPerPage: limit,
@@ -108,7 +109,7 @@ const Page = () => {
     } finally {
       setLoading(false);
     }
-  }, [search, filterType, currentPage, limit]);
+  }, [debouncedSearch, filterType, currentPage, limit]);
 
   //FETCH SUMMARY
   const fetchSummary = useCallback(async () => {
@@ -128,7 +129,14 @@ const Page = () => {
   }, [fetchCategories]);
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, filterType, mode, limit]);
+  }, [debouncedSearch, filterType, mode, limit]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [search]);
 
   //HELPERS
   const handlePageChange = (page: number) => {

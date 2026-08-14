@@ -6,8 +6,11 @@ import { FaArrowTrendUp, FaArrowTrendDown } from "react-icons/fa6";
 import { createCategory } from "@/services/category.service";
 import Spinner from "@/components/shared/Spinner";
 import FieldError from "@/components/shared/FieldError";
+import { enqueueSnackbar } from "notistack";
+import { useRouter } from "next/navigation";
 
 const TambahKategoriPage = () => {
+  const router = useRouter()
   const [nama, setNama] = useState("");
   const [tipe, setTipe] = useState<"income" | "expense" | null>(null);
   const [deskripsi, setDeskripsi] = useState("");
@@ -16,7 +19,6 @@ const TambahKategoriPage = () => {
     tipe?: string;
     deskripsi?: string;
   }>({});
-  const [serverError, setServerError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const handleClear = () => {
@@ -24,7 +26,6 @@ const TambahKategoriPage = () => {
     setTipe(null);
     setDeskripsi("");
     setErrors({});
-    setServerError(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -52,8 +53,12 @@ const TambahKategoriPage = () => {
         });
 
         if (result && result.error) {
-          setServerError(result.error);
+          enqueueSnackbar(result.error, { variant: "error" });
+          return;
         }
+
+        enqueueSnackbar("Kategori berhasil ditambahkan", { variant: "success" });
+        router.push("/app/settings/kategori");
       });
     }
   };
@@ -61,13 +66,6 @@ const TambahKategoriPage = () => {
   return (
     <div className="bg-surface shadow rounded-xl border border-gray-200 mx-auto">
       <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6">
-        {/* Server Error */}
-        {serverError && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-xs md:text-sm">
-            {serverError}
-          </div>
-        )}
-
         {/* Nama Kategori */}
         <div>
           <label

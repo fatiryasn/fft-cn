@@ -1,6 +1,6 @@
 "use client";
 
-import { login } from "@/services/auth.service";
+import { login, loginWithGoogle } from "@/services/auth.service";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { enqueueSnackbar } from "notistack";
@@ -10,6 +10,7 @@ import { FaHome } from "react-icons/fa";
 export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [loadingGoogle, setLoadingGoogle] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -50,13 +51,30 @@ export default function LoginPage() {
     }
   };
 
+  //GOOGLE
+  const handleGoogleLogin = async () => {
+    setLoadingGoogle(true);
+    try {
+      const result = await loginWithGoogle();
+      if (result && result.success === false) {
+        enqueueSnackbar(result.message, {
+          variant: "error",
+        });
+      }
+    } catch (err) {
+      enqueueSnackbar("Terjadi kesalahan, coba lagi", { variant: "error" });
+    } finally {
+      setLoadingGoogle(false);
+    }
+  };
+
   return (
-    <main className="flex min-h-screen flex-col md:flex-row">
+    <main className="flex min-h-screen flex-col md:flex-row space-y-6 md:space-y-0 pb-20 md:pb-0">
       {/* Left */}
-      <div className="flex justify-center items-center p-20 bg-white rounded-r-full border-r-secondary border-r-8">
-        <div className="flex flex-col gap-3">
+      <div className="flex justify-center items-center p-10 lg:p-20 bg-white rounded-b-3xl border-b-secondary border-b-8 md:rounded-r-full md:border-r-secondary md:border-r-8 flex-1 lg:flex-none">
+        <div className="flex flex-col items-center md:items-start gap-3">
           {/* logo */}
-          <div className="h-auto w-96">
+          <div className="h-auto w-48 md:w-60 lg:w-72 xl:w-96">
             <img
               src="/coino-logo.png"
               alt="Coino Logo"
@@ -64,7 +82,7 @@ export default function LoginPage() {
             />
           </div>
           {/* description */}
-          <p className="max-w-lg leading-relaxed">
+          <p className="max-w-lg leading-relaxed text-center md:text-left text-xs md:text-sm lg:text-base">
             Catat pergerakan keuangan anda dari berbagai sumber dalam satu
             aplikasi.
           </p>
@@ -79,21 +97,27 @@ export default function LoginPage() {
         </div>
       </div>
       {/* Right */}
-      <div className="flex items-center justify-center p-20 flex-1">
+      <div className="flex items-center justify-center p-5 md:p-10 lg:p-20 lg:flex-1">
         <div className="flex flex-col gap-3">
-          <h1 className="font-bold text-3xl">Login</h1>
-          <p className="text-gray-700 text-sm">
+          <h1 className="font-bold text-xl md:text-2xl lg:text-3xl">Login</h1>
+          <p className="text-gray-700 text-xs md:text-sm">
             Masukkan akun anda yang sudah terdaftar untuk mengakses aplikasi.
           </p>
 
           {/* login with google */}
-          <button className="flex items-center justify-center px-5 py-3 mt-10 gap-3 border border-gray-200 rounded-lg bg-surface hover:bg-gray-100 transition shadow">
+          <button
+            onClick={handleGoogleLogin}
+            disabled={loadingGoogle}
+            className="flex items-center justify-center px-5 py-3 mt-10 gap-3 border border-gray-200 rounded-lg bg-surface hover:bg-gray-100 transition shadow disabled:opacity-50 text-sm md:text-base"
+          >
             <img
               src="/google-logo.webp"
               alt="Google"
               className="aspect-square h-5"
             />
-            <span>Login dengan Google</span>
+            <span>
+              {loadingGoogle ? "Memproses..." : "Login dengan Google"}
+            </span>
           </button>
 
           <div className="flex gap-7 items-center mt-5">
@@ -108,7 +132,7 @@ export default function LoginPage() {
             <div>
               <label
                 htmlFor="email"
-                className="block text-sm font-medium text-text"
+                className="block text-xs md:text-sm font-medium"
               >
                 Email
               </label>
@@ -120,7 +144,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full mt-2 px-5 py-3 bg-surface border border-gray-200 shadow rounded-lg focus:outline-none"
+                className="w-full mt-2 px-5 py-3 bg-surface border border-gray-200 shadow rounded-lg focus:outline-none text-sm md:text-base"
                 placeholder="youremail@example.com"
               />
             </div>
@@ -128,7 +152,7 @@ export default function LoginPage() {
             <div>
               <label
                 htmlFor="password"
-                className="block text-sm font-medium text-text"
+                className="block text-xs md:text-sm font-medium"
               >
                 Password
               </label>
@@ -140,7 +164,7 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full mt-2 px-5 py-3 bg-surface border border-gray-200 shadow rounded-lg focus:outline-none"
+                className="w-full mt-2 px-5 py-3 bg-surface border border-gray-200 shadow rounded-lg focus:outline-none text-sm md:text-base"
                 placeholder="••••••••"
               />
             </div>
@@ -155,7 +179,7 @@ export default function LoginPage() {
           </form>
 
           {/* register */}
-          <p className="text-sm text-gray-700 mt-5">
+          <p className="text-xs md:text-sm text-gray-700 mt-5">
             Baru di coino?{" "}
             <Link
               href="/register"

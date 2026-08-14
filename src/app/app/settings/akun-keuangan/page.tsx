@@ -82,6 +82,7 @@ const Page = () => {
   const router = useRouter();
   //STATES
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterType, setFilterType] = useState<"semua" | "cash" | "cashless">(
     "semua",
   );
@@ -105,7 +106,7 @@ const Page = () => {
     setError(null);
     try {
       const result = await getAccounts({
-        search,
+        search: debouncedSearch,
         type: filterType,
         page: currentPage,
         itemsPerPage: limit,
@@ -122,7 +123,7 @@ const Page = () => {
     } finally {
       setLoading(false);
     }
-  }, [search, filterType, currentPage, limit]);
+  }, [debouncedSearch, filterType, currentPage, limit]);
 
   //FETCH SUMMARY
   const fetchSummary = useCallback(async () => {
@@ -142,7 +143,13 @@ const Page = () => {
   }, [fetchAccounts]);
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, filterType, mode, limit]);
+  }, [debouncedSearch, filterType, mode, limit]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);

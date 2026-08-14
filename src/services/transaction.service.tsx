@@ -79,12 +79,9 @@ export async function getTransactions(params: GetTransactionsParams) {
     .eq("user_id", user.id)
     .order("transaction_at", { ascending: false });
 
-  if (search) {
-    query = query.or(
-      `note.ilike.%${search}%, categories.name.ilike.%${search}%`,
-    );
-  }
-
+if (search) {
+  query = query.or(`note.ilike.%${search}%,code.ilike.%${search}%`);
+}
   if (purpose !== "semua") {
     query = query.eq("purpose", purpose);
   }
@@ -185,9 +182,9 @@ export async function getTransactionsPeriodic(params: GetPeriodicParams) {
     .eq("user_id", user.id)
     .order("transaction_at", { ascending: false });
 
-  if (search) {
-    query = query.or(`note.ilike.%${search}%, categories.name.ilike.%${search}%`);
-  }
+if (search) {
+  query = query.or(`note.ilike.%${search}%,code.ilike.%${search}%`);
+}
   if (purpose !== "semua") {
     query = query.eq("purpose", purpose);
   }
@@ -431,13 +428,41 @@ export async function deleteTransaction(id: string) {
   const user = await requireUser();
   if (!user) redirect("/login");
 
-  // Also delete attachments from storage (optional, but we'll only delete DB records)
-  const { error } = await supabase
+  //get attachments
+  const { data: attachments, error: fetchAttachmentsError } = await supabase
+    .from("transaction_attachments")
+    .select("image_path")
+    .eq("transaction_id", id);
+
+  if (fetchAttachmentsError) {
+    return { error: fetchAttachmentsError.message };
+  }
+
+  //delete transaction
+  const { error: deleteError } = await supabase
     .from("transactions")
     .delete()
     .eq("id", id)
     .eq("user_id", user.id);
 
-  if (error) return { error: error.message };
+  if (deleteError) {
+    return { error: deleteError.message };
+  }
+
+  //delete physical files
+  if (attachments && attachments.length > 0) {
+    const paths = attachments.map((att) => att.image_path);
+    const { error: storageError } = await supabase.storage
+      .from("uploads")
+      .remove(paths);
+
+    if (storageError) {
+      console.error(
+        "Failed to delete storage files:",
+        storageError.message
+      );
+    }
+  }
+
   return { success: true };
 }

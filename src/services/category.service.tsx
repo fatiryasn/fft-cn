@@ -114,7 +114,7 @@ export async function createCategory(input: CreateCategoryInput) {
     return { error: error.message };
   }
 
-  redirect("/app/settings/kategori");
+  return { success: true, name };
 }
 
 

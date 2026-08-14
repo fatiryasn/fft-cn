@@ -65,7 +65,7 @@ export async function createAccount(input: CreateAccountInput) {
     return { error: error.message };
   }
 
-  redirect("/app/settings/akun-keuangan");
+  return { success: true, name };
 }
 
 //GET ACCOUNTS

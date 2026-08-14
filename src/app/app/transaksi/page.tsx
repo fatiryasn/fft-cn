@@ -100,6 +100,7 @@ const Page = () => {
 
   //STATES
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [filterPurpose, setFilterPurpose] = useState<
     "semua" | "income" | "expense" | "account_transfer"
   >("semua");
@@ -154,7 +155,7 @@ const Page = () => {
     setErrorTable(null);
     try {
       const result = await getTransactions({
-        search,
+        search: debouncedSearch,
         purpose: filterPurpose,
         page: currentPage,
         itemsPerPage: limit,
@@ -171,7 +172,7 @@ const Page = () => {
     } finally {
       setLoadingTable(false);
     }
-  }, [search, filterPurpose, currentPage, limit]);
+  }, [debouncedSearch, filterPurpose, currentPage, limit]);
   //FETCH PERIODIC DATA
   const fetchPeriodic = useCallback(
     async (reset = false) => {
@@ -186,7 +187,7 @@ const Page = () => {
       try {
         const cursor = reset ? undefined : cursorPeriodic;
         const result = await getTransactionsPeriodic({
-          search,
+          search: debouncedSearch,
           purpose: filterPurpose,
           limit: PERIODIC_BATCH_SIZE,
           cursor: cursor || undefined,
@@ -196,8 +197,6 @@ const Page = () => {
           setErrorPeriodic(result.error || "Terjadi kesalahan");
           return;
         }
-
-        // result.transactions is the flat list
         if (reset) {
           setAllTransactions(result.transactions);
         } else {
@@ -214,7 +213,7 @@ const Page = () => {
         setLoadingPeriodic(false);
       }
     },
-    [search, filterPurpose, cursorPeriodic],
+    [debouncedSearch, filterPurpose, cursorPeriodic],
   );
 
   //INTERSECTION OBSERVER
@@ -259,7 +258,13 @@ const Page = () => {
       setErrorPeriodic(null);
       fetchPeriodic(true);
     }
-  }, [mode, search, filterPurpose]);
+  }, [mode, debouncedSearch, filterPurpose]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   //HANDLERS
   const handlePageChange = (page: number) => setCurrentPage(page);
