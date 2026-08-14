@@ -12,7 +12,7 @@ export default function EmptyState({
   className = "",
 }: Props) {
   return (
-    <div className={`text-center py-12 text-gray-500 ${className}`}>
+    <div className={`flex flex-col items-center gap-2 py-12 text-gray-500 ${className}`}>
       {icon}
       <p>{message}</p>
     </div>
