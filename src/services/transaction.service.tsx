@@ -250,8 +250,8 @@ export async function getAccountsForPicker(search?: string) {
   if (!user) redirect("/login");
 
   let query = supabase
-    .from("accounts")
-    .select("id, name, type")
+    .from("accounts_with_balance")
+    .select("id, name, type, current_balance")
     .eq("user_id", user.id)
     .order("name", { ascending: true })
     .limit(10);
@@ -271,90 +271,161 @@ export async function createTransaction(input: CreateTransactionInput) {
   const user = await requireUser();
   if (!user) redirect("/login");
 
-  const { purpose, category_id, note, transaction_at, entries, attachments } = input;
+  const { purpose, category_id, note, transaction_at, entries, attachments } =
+    input;
 
   //validate
-  if (!purpose || !["income", "expense", "account_transfer"].includes(purpose)) {
+  // validate purpose
+  if (
+    !purpose ||
+    !["income", "expense", "account_transfer"].includes(purpose)
+  ) {
     return { error: "Tipe transaksi tidak valid" };
   }
-  if (purpose !== "account_transfer" && entries.length === 0) {
+  // validate note length
+  if (note && note.length > 300) {
+    return { error: "Keterangan maksimal 300 karakter" };
+  }
+  // validate date
+  if (!transaction_at || isNaN(Date.parse(transaction_at))) {
+    return { error: "Tanggal transaksi tidak valid" };
+  }
+  // validate entries is an array
+  if (!Array.isArray(entries) || entries.length === 0) {
     return { error: "Minimal satu akun harus diisi" };
   }
-  if (purpose === "account_transfer" && entries.length !== 2) {
-    return { error: "Relokasi membutuhkan akun sumber dan tujuan" };
+  // validate each entry amount
+  for (const entry of entries) {
+    if (!entry.account_id) {
+      return { error: "Akun harus dipilih" };
+    }
+    if (
+      typeof entry.amount !== "number" ||
+      isNaN(entry.amount) ||
+      entry.amount <= 0
+    ) {
+      return { error: "Nominal harus lebih dari 0" };
+    }
+  }
+  if (purpose === "account_transfer") {
+    //exactly two entries
+    if (entries.length !== 2) {
+      return { error: "Relokasi membutuhkan akun sumber dan tujuan" };
+    }
+    //source and destination must be different
+    if (entries[0].account_id === entries[1].account_id) {
+      return { error: "Akun sumber dan tujuan harus berbeda" };
+    }
+    // category not allowed
+    if (category_id) {
+      return { error: "Relokasi tidak memerlukan kategori" };
+    }
+  } else {
+    // income/expense
+    if (entries.length === 0) {
+      return { error: "Minimal satu akun harus diisi" };
+    }
+    //prevent duplicate account IDs in the same transaction
+    const accountIds = entries.map((e) => e.account_id);
+    if (new Set(accountIds).size !== accountIds.length) {
+      return { error: "Akun tidak boleh duplikat dalam satu transaksi" };
+    }
+    //category is required
+    if (!category_id) {
+      return { error: "Kategori harus dipilih" };
+    }
   }
 
-  //signed amount
-  const signedEntries = entries.map((e) => ({
+  //signed entries
+  const signedEntries = entries.map((e, index) => ({
     account_id: e.account_id,
     signed_amount:
       purpose === "income"
         ? Math.abs(e.amount)
         : purpose === "expense"
-        ? -Math.abs(e.amount)
-        :
-        entries.indexOf(e) === 0
-        ? -Math.abs(e.amount)
-        : Math.abs(e.amount),
+          ? -Math.abs(e.amount)
+          : index === 0
+            ? -Math.abs(e.amount)
+            : Math.abs(e.amount),
   }));
 
-  //insert
-  const { data: transaction, error: txError } = await supabase
-    .from("transactions")
-    .insert({
-      user_id: user.id,
-      purpose,
-      category_id: category_id || null,
-      note: note || null,
-      transaction_at,
-    })
-    .select("id")
-    .single();
+  let createdTransactionId: string | null = null;
+  const uploadedFilePaths: string[] = [];
 
-  if (txError) return { error: txError.message };
+  try {
+    //insert transaction
+    const { data: transaction, error: txError } = await supabase
+      .from("transactions")
+      .insert({
+        user_id: user.id,
+        purpose,
+        category_id: category_id || null,
+        note: note || null,
+        transaction_at,
+      })
+      .select("id")
+      .single();
 
-  const transactionId = transaction.id;
+    if (txError) throw new Error(txError.message);
+    createdTransactionId = transaction.id;
 
-  // Insert entries
-  const { error: entriesError } = await supabase.from("transaction_entries").insert(
-    signedEntries.map((e) => ({
-      transaction_id: transactionId,
-      account_id: e.account_id,
-      signed_amount: e.signed_amount,
-    }))
-  );
-  if (entriesError) return { error: entriesError.message };
+    //insert entries
+    const { error: entriesError } = await supabase
+      .from("transaction_entries")
+      .insert(
+        signedEntries.map((e) => ({
+          transaction_id: createdTransactionId,
+          account_id: e.account_id,
+          signed_amount: e.signed_amount,
+        })),
+      );
 
-  //attachments
-  if (attachments && attachments.length > 0) {
-    const uploadPromises = attachments.map(async (file) => {
-      const filePath = `${user.id}/${transactionId}/${file.name}`;
-      const { error: uploadError } = await supabase.storage
-        .from("uploads")
-        .upload(filePath, file, { upsert: false });
+    if (entriesError) throw new Error(entriesError.message);
 
-      if (uploadError) throw new Error(uploadError.message);
+    //insert attachments
+    if (attachments && attachments.length > 0) {
+      for (const [index, file] of attachments.entries()) {
+        const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+        const safeFileName = `${createdTransactionId}-${Date.now()}-${index}.${ext}`;
+        const filePath = `${user.id}/${createdTransactionId}/${safeFileName}`;
 
-      const { error: attachError } = await supabase
-        .from("transaction_attachments")
-        .insert({
-          transaction_id: transactionId,
-          image_path: filePath,
-        });
-      if (attachError) throw new Error(attachError.message);
-    });
+        const { error: uploadError } = await supabase.storage
+          .from("uploads")
+          .upload(filePath, file, { upsert: false });
 
-    try {
-      await Promise.all(uploadPromises);
-    } catch (err: any) {
-      return { error: err.message };
+        if (uploadError) throw new Error(uploadError.message);
+        uploadedFilePaths.push(filePath);
+
+        const { error: attachError } = await supabase
+          .from("transaction_attachments")
+          .insert({
+            transaction_id: createdTransactionId,
+            image_path: filePath,
+          });
+
+        if (attachError) throw new Error(attachError.message);
+      }
     }
-  }
 
-  return { success: true, transactionId };
+    return { success: true, transactionId: createdTransactionId };
+  } catch (error: any) {
+    if (createdTransactionId) {
+      await supabase
+        .from("transactions")
+        .delete()
+        .eq("id", createdTransactionId)
+        .eq("user_id", user.id);
+    }
+
+    if (uploadedFilePaths.length > 0) {
+      await supabase.storage.from("uploads").remove(uploadedFilePaths);
+    }
+
+    return { error: error.message || "Terjadi kesalahan" };
+  }
 }
 
-//GET TRANSACTION BY ID
+// GET TRANSACTION BY ID
 export async function getTransactionById(id: string) {
   const supabase = await createClient();
   const user = await requireUser();
@@ -389,6 +460,25 @@ export async function getTransactionById(id: string) {
     .single();
 
   if (error) return { error: error.message };
+
+  // If transaction has attachments, generate signed URLs for private bucket access
+  if (data?.transaction_attachments) {
+    data.transaction_attachments = await Promise.all(
+      data.transaction_attachments.map(async (att: any) => {
+        const { data: signedData, error: signedError } = await supabase.storage
+          .from("uploads")
+          .createSignedUrl(att.image_path, 600); // valid for 10 minutes
+
+        if (signedError) {
+          console.error("Error creating signed URL:", signedError);
+          return { ...att, image_url: null };
+        }
+
+        return { ...att, image_url: signedData.signedUrl };
+      })
+    );
+  }
+
   return { transaction: data };
 }
 

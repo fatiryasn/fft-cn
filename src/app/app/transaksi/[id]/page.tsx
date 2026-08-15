@@ -347,7 +347,10 @@ const Page = () => {
           <span className="block text-xs md:text-sm font-medium text-gray-700 mb-1">
             Tipe Transaksi
           </span>
-          {getTransactionPurposeBadge(transaction.purpose, "text-xs md:text-sm")}
+          {getTransactionPurposeBadge(
+            transaction.purpose,
+            "text-xs md:text-sm",
+          )}
         </div>
 
         {/* jumlah */}
@@ -511,11 +514,11 @@ const Page = () => {
             {transaction.transaction_attachments.map((att: any) => (
               <div
                 key={att.id}
-                className="relative w-24 h-24 bg-gray-100 rounded-lg overflow-hidden cursor-pointer"
-                onClick={() => setFullscreenImage(att.image_path)}
+                className="relative w-20 h-32 bg-gray-100 rounded-lg overflow-hidden cursor-pointer"
+                onClick={() => setFullscreenImage(att.image_url)}
               >
                 <img
-                  src={att.image_path}
+                  src={att.image_url}
                   alt="attachment"
                   className="object-cover w-full h-full"
                 />
@@ -557,18 +560,27 @@ const Page = () => {
           className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
           onClick={() => setFullscreenImage(null)}
         >
-          <img
-            src={fullscreenImage}
-            alt="preview"
-            className="max-w-full max-h-full object-contain"
+          <div
+            className="relative"
+            style={{
+              aspectRatio: "5 / 8",
+              maxHeight: "90vh",
+              maxWidth: "90vw",
+            }}
             onClick={(e) => e.stopPropagation()}
-          />
-          <button
-            onClick={() => setFullscreenImage(null)}
-            className="absolute top-4 right-4 text-white text-2xl"
           >
-            <FaTimes />
-          </button>
+            <img
+              src={fullscreenImage}
+              alt="preview"
+              className="w-full h-full object-cover rounded-lg"
+            />
+            <button
+              onClick={() => setFullscreenImage(null)}
+              className="absolute top-2 right-2 text-white text-2xl bg-black/50 rounded-full p-1"
+            >
+              <FaTimes />
+            </button>
+          </div>
         </div>
       )}
 

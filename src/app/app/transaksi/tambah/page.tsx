@@ -21,6 +21,7 @@ import { getAccountTypeBadge } from "@/lib/utils/account.util";
 import AccountPicker from "@/components/shared/AccountPicker";
 import CategoryPicker from "@/components/shared/CategoryPicker";
 import FieldError from "@/components/shared/FieldError";
+import Spinner from "@/components/shared/Spinner"; // imported for loading state
 
 //CONSTANTS
 const MAX_IMAGES = 3;
@@ -54,6 +55,9 @@ const Page = () => {
   const [transactionTime, setTransactionTime] = useState("00:00");
   const [useSpecificTime, setUseSpecificTime] = useState(false);
 
+  //submitting state
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   //picker popup states
   const [isCategoryPickerOpen, setIsCategoryPickerOpen] = useState(false);
   const [isAccountPickerOpen, setIsAccountPickerOpen] = useState(false);
@@ -75,6 +79,7 @@ const Page = () => {
     setTransactionDate(new Date().toISOString().slice(0, 10));
     setTransactionTime("00:00");
     setUseSpecificTime(false);
+    setIsSubmitting(false); // reset submitting state if form reset
   }, [purpose]);
 
   // Category picker handlers
@@ -279,6 +284,7 @@ const Page = () => {
   const handleSubmit = async () => {
     if (!validate()) return;
 
+    setIsSubmitting(true);
     const timePart = useSpecificTime ? transactionTime : "00:00";
     const combinedDateTime = `${transactionDate}T${timePart}:00`;
     const transaction_at = new Date(combinedDateTime).toISOString();
@@ -294,6 +300,7 @@ const Page = () => {
       attachments: images.length > 0 ? images : undefined,
     };
     const result = await createTransaction(data);
+    setIsSubmitting(false);
     if (result.error) {
       enqueueSnackbar(result.error, { variant: "error" });
     } else {
@@ -304,7 +311,7 @@ const Page = () => {
 
   //FORM STEPS
   const stepComponents = [
-    //STEP 0
+    /* step 0 */
     <div key="step0" className="space-y-4">
       <h3 className="md:text-lg font-semibold text-gray-800">
         Pilih Tipe Transaksi
@@ -327,11 +334,12 @@ const Page = () => {
                 key={opt.value}
                 type="button"
                 onClick={() => setPurpose(opt.value)}
+                disabled={isSubmitting} // disable while submitting
                 className={`flex flex-col items-center justify-center p-6 rounded-xl border-2 transition h-32 md:h-48 ${
                   isSelected
                     ? "border-secondary bg-secondary/5 text-secondary"
                     : "border-gray-200 hover:border-gray-300"
-                }`}
+                } ${isSubmitting ? "opacity-50 pointer-events-none" : ""}`}
               >
                 <div className="mb-2">{iconMap[opt.value]}</div>
                 <span
@@ -351,7 +359,7 @@ const Page = () => {
       </div>
     </div>,
 
-    //STEP 1
+    /* step 1 */
     <div key="step1" className="space-y-4">
       {/* income/expense */}
       {purpose !== "account_transfer" ? (
@@ -372,6 +380,7 @@ const Page = () => {
               onChange={(e) => setNote(e.target.value)}
               maxLength={300}
               rows={2}
+              disabled={isSubmitting}
               className="w-full px-3 py-2 border border-gray-200 shadow rounded-lg focus:outline-none text-sm md:text-base"
               placeholder="Deskripsi transaksi..."
             />
@@ -387,6 +396,7 @@ const Page = () => {
               value={transactionDate}
               onChange={(e) => setTransactionDate(e.target.value)}
               max={new Date().toISOString().slice(0, 10)}
+              disabled={isSubmitting}
               className="w-full px-3 py-2 border border-gray-200 shadow rounded-lg focus:outline-none text-sm md:text-base"
             />
             {errors.transactionDate && (
@@ -401,6 +411,7 @@ const Page = () => {
                 type="checkbox"
                 checked={useSpecificTime}
                 onChange={(e) => setUseSpecificTime(e.target.checked)}
+                disabled={isSubmitting}
                 className="rounded border-gray-300 text-secondary focus:ring-secondary"
               />
               Gunakan jam spesifik
@@ -410,6 +421,7 @@ const Page = () => {
                 type="time"
                 value={transactionTime}
                 onChange={(e) => setTransactionTime(e.target.value)}
+                disabled={isSubmitting}
                 className="w-full px-3 py-2 border border-gray-200 shadow rounded-lg focus:outline-none text-sm md:text-base"
               />
             )}
@@ -420,6 +432,7 @@ const Page = () => {
             <button
               type="button"
               onClick={openCategoryPicker}
+              disabled={isSubmitting}
               className="w-full text-left px-4 py-2 border border-gray-200 shadow rounded-lg bg-white hover:bg-gray-50 flex justify-between items-center text-sm md:text-base"
             >
               <span
@@ -446,6 +459,7 @@ const Page = () => {
             <button
               type="button"
               onClick={() => openAccountPicker(0)}
+              disabled={isSubmitting}
               className="w-full text-left px-4 py-2 border border-gray-200 shadow rounded-lg bg-white hover:bg-gray-50 flex justify-between items-center text-sm md:text-base"
             >
               <span
@@ -472,6 +486,7 @@ const Page = () => {
               groupSeparator="."
               decimalSeparator=","
               decimalsLimit={2}
+              disabled={isSubmitting}
               className="w-full px-3 py-2 border border-gray-200 shadow rounded-lg focus:outline-none text-sm md:text-base"
             />
             {errors.amount_0 && (
@@ -501,6 +516,7 @@ const Page = () => {
                     <button
                       type="button"
                       onClick={() => openAccountPicker(i)}
+                      disabled={isSubmitting}
                       className="w-full text-left px-4 py-2 border border-gray-200 shadow rounded-lg bg-white hover:bg-gray-50 text-sm md:text-base truncate"
                     >
                       {entry.account_name || "Pilih akun..."}
@@ -524,6 +540,7 @@ const Page = () => {
                       groupSeparator="."
                       decimalSeparator=","
                       decimalsLimit={2}
+                      disabled={isSubmitting}
                       className="w-full px-3 py-2 border border-gray-200 shadow rounded-lg focus:outline-none text-sm md:text-base"
                     />
                     {errors[`amount_${i}`] && (
@@ -537,6 +554,7 @@ const Page = () => {
                 <button
                   type="button"
                   onClick={() => removeEntryRow(i)}
+                  disabled={isSubmitting}
                   className="p-2 text-red-500 hover:text-red-700 sm:self-end"
                 >
                   <FaX className="font-bold" />
@@ -548,6 +566,7 @@ const Page = () => {
           <button
             type="button"
             onClick={() => openAccountPicker(null)}
+            disabled={isSubmitting}
             className="flex items-center gap-1 text-secondary font-medium text-sm md:text-base"
           >
             <FaPlus /> Tambah Akun
@@ -563,6 +582,7 @@ const Page = () => {
             <button
               type="button"
               onClick={() => openAccountPicker(1)}
+              disabled={isSubmitting}
               className="w-full text-left px-4 py-2 border border-gray-200 shadow rounded-lg bg-white hover:bg-gray-50 flex justify-between items-center text-sm md:text-base"
             >
               <span
@@ -588,6 +608,7 @@ const Page = () => {
               groupSeparator="."
               decimalSeparator=","
               decimalsLimit={2}
+              disabled={isSubmitting}
               className="w-full px-3 py-2 border border-gray-200 shadow rounded-lg focus:outline-none text-sm md:text-base"
             />
             {errors.amount_1 && (
@@ -619,6 +640,7 @@ const Page = () => {
                 <button
                   type="button"
                   onClick={() => removeImage(idx)}
+                  disabled={isSubmitting}
                   className="absolute top-0 right-0 p-1 bg-red-500 text-white rounded-bl"
                 >
                   <FaTrash size={10} />
@@ -632,6 +654,7 @@ const Page = () => {
                   type="file"
                   accept="image/*"
                   onChange={handleImageAdd}
+                  disabled={isSubmitting}
                   className="hidden"
                 />
               </label>
@@ -650,11 +673,10 @@ const Page = () => {
               onChange={(e) => setNote(e.target.value)}
               maxLength={300}
               rows={2}
+              disabled={isSubmitting}
               className="w-full px-3 py-2 border border-gray-200 shadow rounded-lg focus:outline-none text-sm md:text-base"
             />
-            {errors.note && (
-              <FieldError message={errors.note}/>
-            )}
+            {errors.note && <FieldError message={errors.note} />}
           </div>
           {/* date */}
           <div>
@@ -666,10 +688,11 @@ const Page = () => {
               value={transactionDate}
               onChange={(e) => setTransactionDate(e.target.value)}
               max={new Date().toISOString().slice(0, 10)}
+              disabled={isSubmitting}
               className="w-full px-3 py-2 border border-gray-200 shadow rounded-lg focus:outline-none text-sm md:text-base"
             />
             {errors.transactionDate && (
-              <FieldError message={errors.transactionDate}/>
+              <FieldError message={errors.transactionDate} />
             )}
           </div>
 
@@ -680,6 +703,7 @@ const Page = () => {
                 type="checkbox"
                 checked={useSpecificTime}
                 onChange={(e) => setUseSpecificTime(e.target.checked)}
+                disabled={isSubmitting}
                 className="rounded border-gray-300 text-secondary focus:ring-secondary"
               />
               Gunakan jam spesifik
@@ -689,6 +713,7 @@ const Page = () => {
                 type="time"
                 value={transactionTime}
                 onChange={(e) => setTransactionTime(e.target.value)}
+                disabled={isSubmitting}
                 className="w-full px-3 py-2 border border-gray-200 shadow rounded-lg focus:outline-none"
               />
             )}
@@ -708,6 +733,7 @@ const Page = () => {
                 <button
                   type="button"
                   onClick={() => removeImage(idx)}
+                  disabled={isSubmitting}
                   className="absolute top-0 right-0 p-1 bg-red-500 text-white rounded-bl"
                 >
                   <FaTrash size={10} />
@@ -721,6 +747,7 @@ const Page = () => {
                   type="file"
                   accept="image/*"
                   onChange={handleImageAdd}
+                  disabled={isSubmitting}
                   className="hidden"
                 />
               </label>
@@ -868,7 +895,7 @@ const Page = () => {
         <div className="flex justify-end gap-3 mt-4">
           <button
             onClick={() => setDesktopStep((prev) => Math.max(0, prev - 1))}
-            disabled={desktopStep === 0}
+            disabled={desktopStep === 0 || isSubmitting}
             className="px-4 py-2 bg-gray-200 rounded-lg disabled:opacity-50 flex items-center gap-2"
           >
             <FaChevronLeft /> Sebelumnya
@@ -890,16 +917,26 @@ const Page = () => {
                 }
                 setDesktopStep((prev) => prev + 1);
               }}
-              className="px-4 py-2 bg-secondary text-white rounded-lg flex items-center gap-2"
+              disabled={isSubmitting}
+              className="px-4 py-2 bg-secondary text-white rounded-lg flex items-center gap-2 disabled:opacity-50"
             >
               Berikutnya <FaChevronRight />
             </button>
           ) : (
             <button
               onClick={handleSubmit}
-              className="px-6 py-2 bg-secondary text-white rounded-lg font-semibold flex items-center gap-2"
+              disabled={isSubmitting}
+              className="px-6 py-2 bg-secondary text-white rounded-lg font-semibold flex items-center gap-2 disabled:opacity-50"
             >
-              <FaCheckCircle /> Simpan Transaksi
+              {isSubmitting ? (
+                <>
+                  <Spinner className="text-white" /> Menyimpan...
+                </>
+              ) : (
+                <>
+                  <FaCheckCircle /> Simpan Transaksi
+                </>
+              )}
             </button>
           )}
         </div>
@@ -926,7 +963,7 @@ const Page = () => {
         <div className="flex justify-between mt-4">
           <button
             onClick={() => setCurrentStep((p) => Math.max(0, p - 1))}
-            disabled={currentStep === 0}
+            disabled={currentStep === 0 || isSubmitting}
             className="px-4 py-2 bg-gray-200 rounded-lg disabled:opacity-50 flex items-center gap-2 text-sm md:text-base"
           >
             <FaChevronLeft /> Sebelumnya
@@ -934,16 +971,26 @@ const Page = () => {
           {currentStep < stepComponents.length - 1 ? (
             <button
               onClick={handleNextMobile}
-              className="px-4 py-2 bg-secondary text-white rounded-lg flex items-center gap-2 text-sm md:text-base"
+              disabled={isSubmitting}
+              className="px-4 py-2 bg-secondary text-white rounded-lg flex items-center gap-2 text-sm md:text-base disabled:opacity-50"
             >
               Berikutnya <FaChevronRight />
             </button>
           ) : (
             <button
               onClick={handleSubmit}
-              className="px-6 py-2 bg-secondary text-white rounded-lg font-semibold flex items-center gap-2"
+              disabled={isSubmitting}
+              className="px-6 py-2 bg-secondary text-white rounded-lg font-semibold flex items-center gap-2 disabled:opacity-50"
             >
-              <FaCheckCircle /> Simpan
+              {isSubmitting ? (
+                <>
+                  <Spinner className="text-white" /> Menyimpan...
+                </>
+              ) : (
+                <>
+                  <FaCheckCircle /> Simpan
+                </>
+              )}
             </button>
           )}
         </div>

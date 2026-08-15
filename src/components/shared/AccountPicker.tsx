@@ -6,11 +6,13 @@ import { enqueueSnackbar } from "notistack";
 import { getAccountsForPicker } from "@/services/transaction.service";
 import Spinner from "./Spinner";
 import { getAccountTypeBadge } from "@/lib/utils/account.util";
+import { formatRupiah } from "@/lib/utils/common.util";
 
 interface Account {
   id: string;
   name: string;
   type: "cash" | "cashless";
+  current_balance: number;
 }
 
 interface Props {
@@ -23,11 +25,7 @@ interface Props {
   ) => void;
 }
 
-export default function AccountPicker({
-  isOpen,
-  onClose,
-  onSelect,
-}: Props) {
+export default function AccountPicker({ isOpen, onClose, onSelect }: Props) {
   const [search, setSearch] = useState("");
   const [list, setList] = useState<Account[]>([]);
   const [loading, setLoading] = useState(false);
@@ -96,7 +94,12 @@ export default function AccountPicker({
                 onClick={() => onSelect(acc.id, acc.name, acc.type)}
                 className="w-full text-left p-3 rounded-lg hover:bg-gray-50 border border-gray-200 flex justify-between items-center"
               >
-                <span>{acc.name}</span>
+                <div className="flex flex-col">
+                  <span className="font-medium text-gray-800">{acc.name}</span>
+                  <span className="text-xs text-gray-500">
+                    Saldo: {formatRupiah(acc.current_balance)}
+                  </span>
+                </div>
                 {getAccountTypeBadge(acc.type, "text-xs")}
               </button>
             ))

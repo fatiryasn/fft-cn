@@ -100,7 +100,7 @@ const Page = () => {
 
   //STATES
   const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterPurpose, setFilterPurpose] = useState<
     "semua" | "income" | "expense" | "account_transfer"
   >("semua");
@@ -123,6 +123,9 @@ const Page = () => {
   const [cursorPeriodic, setCursorPeriodic] = useState<string | null>(null);
   const observerRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Add these refs near the other refs
+  const isFetchingPeriodicRef = useRef(false);
+  const cursorPeriodicRef = useRef<string | null>(null);
 
   //summary states
   const [totalIncome, setTotalIncome] = useState(0);
@@ -176,6 +179,9 @@ const Page = () => {
   //FETCH PERIODIC DATA
   const fetchPeriodic = useCallback(
     async (reset = false) => {
+      if (isFetchingPeriodicRef.current) return;
+      isFetchingPeriodicRef.current = true;
+
       if (abortRef.current) abortRef.current.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -185,7 +191,8 @@ const Page = () => {
       setErrorPeriodic(null);
 
       try {
-        const cursor = reset ? undefined : cursorPeriodic;
+        const cursor = reset ? undefined : cursorPeriodicRef.current;
+
         const result = await getTransactionsPeriodic({
           search: debouncedSearch,
           purpose: filterPurpose,
@@ -197,12 +204,15 @@ const Page = () => {
           setErrorPeriodic(result.error || "Terjadi kesalahan");
           return;
         }
+
         if (reset) {
           setAllTransactions(result.transactions);
         } else {
           setAllTransactions((prev) => [...prev, ...result.transactions]);
         }
+
         setHasMorePeriodic(result.hasMore);
+        cursorPeriodicRef.current = result.nextCursor ?? null;
         setCursorPeriodic(result.nextCursor ?? null);
       } catch (err: any) {
         if (err.name !== "AbortError") {
@@ -211,9 +221,10 @@ const Page = () => {
       } finally {
         clearTimeout(timeoutId);
         setLoadingPeriodic(false);
+        isFetchingPeriodicRef.current = false;
       }
     },
-    [debouncedSearch, filterPurpose, cursorPeriodic],
+    [debouncedSearch, filterPurpose],
   );
 
   //INTERSECTION OBSERVER
@@ -254,11 +265,12 @@ const Page = () => {
     if (mode === "periodic") {
       setAllTransactions([]);
       setHasMorePeriodic(true);
+      cursorPeriodicRef.current = null;
       setCursorPeriodic(null);
       setErrorPeriodic(null);
       fetchPeriodic(true);
     }
-  }, [mode, debouncedSearch, filterPurpose]);
+  }, [mode, debouncedSearch, filterPurpose, fetchPeriodic]);
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search);
@@ -473,7 +485,10 @@ const Page = () => {
                       </p>
                     </div>
                     <div className="text-right ml-4">
-                      {getTransactionPurposeBadge(t.purpose, "text-xs md:text-sm")}
+                      {getTransactionPurposeBadge(
+                        t.purpose,
+                        "text-xs md:text-sm",
+                      )}
                       <p
                         className={`text-sm font-semibold ${amountColorClass(t.purpose)}`}
                       >
