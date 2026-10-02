@@ -2,6 +2,15 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "./auth.service";
+import { redirect } from "next/navigation";
+
+//UPDATE PROFILE
+const PHONE_REGEX = /^62\d{9,15}$/;
+export interface ResourceCounts {
+  accountCount: number;
+  incomeCategoryCount: number;
+  expenseCategoryCount: number;
+}
 
 //GET PROFILE
 export async function getProfileData() {
@@ -25,9 +34,37 @@ export async function getProfileData() {
   };
 }
 
-//UPDATE PROFILE
-const PHONE_REGEX = /^62\d{9,15}$/;
+//GET USER RESOURCE COUNT
+export async function getUserResourceCounts(): Promise<ResourceCounts> {
+  const supabase = await createClient();
+  const user = await requireUser();
+  if (!user) redirect("/login");
 
+  const [accountsRes, incomeRes, expenseRes] = await Promise.all([
+    supabase
+      .from("accounts")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id),
+    supabase
+      .from("categories")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("type", "income"),
+    supabase
+      .from("categories")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("type", "expense"),
+  ]);
+
+  return {
+    accountCount: accountsRes.count ?? 0,
+    incomeCategoryCount: incomeRes.count ?? 0,
+    expenseCategoryCount: expenseRes.count ?? 0,
+  };
+}
+
+//UPDATE PROFILE
 export async function updateProfile(data: {
   full_name?: string;
   phone_number?: string;
