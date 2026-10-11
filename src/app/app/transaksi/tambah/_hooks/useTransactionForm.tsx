@@ -15,7 +15,6 @@ import {
 
 import { MAX_IMAGES, MAX_IMAGE_SIZE } from "../_lib/constants";
 
-
 export function useTransactionForm() {
   const router = useRouter();
 
@@ -192,6 +191,13 @@ export function useTransactionForm() {
     router,
   ]);
 
+  const isSameAccount =
+    purpose === "account_transfer" &&
+    entries.length === 2 &&
+    !!entries[0]?.account_id &&
+    !!entries[1]?.account_id &&
+    entries[0].account_id === entries[1].account_id;
+
   return {
     // data
     purpose,
@@ -205,6 +211,7 @@ export function useTransactionForm() {
     transactionTime,
     useSpecificTime,
     isSubmitting,
+    isSameAccount,
     // pickers
     isCategoryPickerOpen,
     isAccountPickerOpen,

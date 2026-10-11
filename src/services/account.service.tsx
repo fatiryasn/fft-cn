@@ -174,6 +174,15 @@ export async function deleteAccount(id: string) {
     .eq("id", id)
     .eq("user_id", user.id);
 
-  if (error) return { error: error.message };
+  if (error) {
+    if (error.code === "23503") {
+      return {
+        error:
+          "Akun tidak bisa dihapus karena masih digunakan di transaksi.",
+      };
+    }
+    return { error: error.message };
+  }
+
   return { success: true };
 }

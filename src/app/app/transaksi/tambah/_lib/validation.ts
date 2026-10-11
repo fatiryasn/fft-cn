@@ -31,6 +31,35 @@ const checkTime = (use: boolean, time: string): Errors =>
 const checkCategory = (id: string | null): Errors =>
   id ? {} : { category: "Pilih kategori" };
 
+const checkTransferAccountsDiffer = (entries: Entry[]): Errors => {
+  if (
+    entries.length === 2 &&
+    entries[0].account_id &&
+    entries[1].account_id &&
+    entries[0].account_id === entries[1].account_id
+  ) {
+    return {
+      account_0: "Akun sumber tidak boleh sama dengan akun tujuan",
+      account_1: "Akun tujuan tidak boleh sama dengan akun sumber",
+    };
+  }
+  return {};
+};
+
+const checkTransferAmounts = (entries: Entry[]): Errors => {
+  if (entries.length !== 2) return {};
+
+  const source = parseFloat(entries[0].amount || "0");
+  const dest = parseFloat(entries[1].amount || "0");
+
+  if (!(source > 0) || !(dest > 0)) return {};
+
+  if (dest > source) {
+    return { amount_1: "Nominal tujuan tidak boleh melebihi nominal sumber" };
+  }
+  return {};
+};
+
 const checkEntry = (entry: Entry, i: number): Errors => {
   const e: Errors = {};
   if (!entry.account_id) e[`account_${i}`] = "Pilih akun";
@@ -56,9 +85,12 @@ export function validateAll(ctx: FormContext): Errors {
       ...checkDate(ctx.transactionDate),
       ...checkTime(ctx.useSpecificTime, ctx.transactionTime),
     };
-    if (ctx.entries.length !== 2)
-      e.entries = "Harus ada akun sumber & tujuan";
+    if (ctx.entries.length !== 2) e.entries = "Harus ada akun sumber & tujuan";
     ctx.entries.forEach((entry, i) => Object.assign(e, checkEntry(entry, i)));
+
+    Object.assign(e, checkTransferAccountsDiffer(ctx.entries));
+    Object.assign(e, checkTransferAmounts(ctx.entries));  
+
     return e;
   }
 
@@ -93,6 +125,8 @@ export function validateMobileStep(ctx: FormContext, step: number): Errors {
   if (step === 2) {
     if (ctx.purpose === "account_transfer") {
       Object.assign(e, checkEntry(ctx.entries[1] ?? ({} as Entry), 1));
+      Object.assign(e, checkTransferAccountsDiffer(ctx.entries));
+      Object.assign(e, checkTransferAmounts(ctx.entries)); 
     } else {
       Object.assign(e, checkEntries(ctx.entries));
     }

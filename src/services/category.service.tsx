@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { requireUser } from "./auth.service";
+import { RECOMMENDED_CATEGORIES } from "@/lib/constants/recommended-categories";
 
 //INTERFACES
 export interface Category {
@@ -117,6 +118,43 @@ export async function createCategory(input: CreateCategoryInput) {
   return { success: true, name };
 }
 
+//CREATE RECOMMENDED CATEGORIES
+export async function createRecommendedCategories() {
+  const supabase = await createClient();
+  const user = await requireUser();
+  if (!user) redirect("/login");
+
+  // Count existing categories for this user
+  const { count, error: countError } = await supabase
+    .from("categories")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", user.id);
+
+  if (countError) return { error: countError.message };
+
+  // Only allowed when the user has zero categories.
+  if ((count ?? 0) > 0) {
+    return {
+      error:
+        "Rekomendasi kategori hanya bisa ditambahkan saat belum ada kategori",
+    };
+  }
+
+  const payload = RECOMMENDED_CATEGORIES.map((c) => ({
+    user_id: user.id,
+    name: c.name,
+    type: c.type,
+    description: c.description,
+  }));
+
+  const { error: insertError } = await supabase
+    .from("categories")
+    .insert(payload);
+
+  if (insertError) return { error: insertError.message };
+
+  return { success: true, created: payload.length };
+}
 
 //GET CATEGORY BY ID
 export async function getCategoryById(id: string) {

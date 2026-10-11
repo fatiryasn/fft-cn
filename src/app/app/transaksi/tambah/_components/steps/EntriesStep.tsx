@@ -22,6 +22,7 @@ export function EntriesStep({ form, disabled }: Props) {
     removeEntryRow,
   } = form;
 
+  //type: relocation
   if (purpose !== "account_transfer") {
     return (
       <div className="space-y-4">
@@ -98,12 +99,14 @@ export function EntriesStep({ form, disabled }: Props) {
     );
   }
 
+  //type: income & expense
   return (
     <div className="space-y-4">
       <h3 className="md:text-lg font-semibold">Akun Tujuan & Nominal</h3>
 
       <div>
         <label className="block text-sm font-medium mb-1">Akun Tujuan</label>
+
         <button
           type="button"
           onClick={() => openAccountPicker(1)}

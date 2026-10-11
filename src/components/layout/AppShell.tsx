@@ -22,7 +22,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex flex-1 flex-col min-w-0">
         <AppNavbar onMenuToggle={toggleMobileSidebar} />
 
-        <main className="flex-1 overflow-y-auto py-5 lg:py-0 px-3 sm:px-5 pb-20">{children}</main>
+        <main className="flex-1 overflow-y-auto py-5 lg:pt-0  px-3 sm:px-5 pb-20">{children}</main>
       </div>
     </div>
   );

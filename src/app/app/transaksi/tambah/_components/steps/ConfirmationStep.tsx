@@ -20,6 +20,29 @@ export function ConfirmationStep({ form }: Props) {
     categoryName,
   } = form;
 
+  // Mirror the server's signed_amount logic so the preview
+  // matches what actually gets written to the ledger.
+  const signedAmount = (amount: number, index: number): number => {
+    if (purpose === "income") return Math.abs(amount);
+    if (purpose === "expense") return -Math.abs(amount);
+    // account_transfer: source (0) leaves, destination (1) enters
+    return index === 0 ? -Math.abs(amount) : Math.abs(amount);
+  };
+
+  // For transfers, the difference between source and destination is
+  // money that leaves the system (implicit fee). Only relevant when
+  // both amounts are filled and the source is larger.
+  const sourceAmount = parseFloat(entries[0]?.amount || "0");
+  const destAmount = parseFloat(entries[1]?.amount || "0");
+  const transferFee =
+    purpose === "account_transfer" &&
+    entries.length === 2 &&
+    sourceAmount > 0 &&
+    destAmount > 0 &&
+    sourceAmount > destAmount
+      ? sourceAmount - destAmount
+      : 0;
+
   return (
     <div className="space-y-6">
       <h3 className="md:text-lg font-semibold text-gray-800">
@@ -74,19 +97,44 @@ export function ConfirmationStep({ form }: Props) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {entries.map((entry, i) => (
-                <tr key={i}>
-                  <td className="px-2 md:px-4 py-2 text-gray-800 font-semibold font-lexend">
-                    {entry.account_name || "-"}
+              {entries.map((entry, i) => {
+                const amount = parseFloat(entry.amount || "0");
+                const signed = signedAmount(amount, i);
+                const isNegative = signed < 0;
+
+                return (
+                  <tr key={i}>
+                    <td className="px-2 md:px-4 py-2 text-gray-800 font-semibold font-lexend">
+                      {entry.account_name || "-"}
+                    </td>
+                    <td className="px-2 md:px-4 py-2">
+                      {getAccountTypeBadge(entry.account_type ?? "", "text-xs")}
+                    </td>
+                    <td
+                      className={`px-2 md:px-4 py-2 font-semibold ${
+                        isNegative ? "text-red-600" : "text-green-600"
+                      }`}
+                    >
+                      {isNegative ? "-" : "+"}Rp{" "}
+                      {Math.abs(signed).toLocaleString("id-ID")}
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {transferFee > 0 && (
+                <tr className="border-t-2 border-gray-400">
+                  <td className="px-2 md:px-4 py-2 text-amber-800 font-semibold">
+                    Biaya / Selisih
                   </td>
-                  <td className="px-2 md:px-4 py-2">
-                    {getAccountTypeBadge(entry.account_type ?? "", "text-xs")}
+                  <td className="px-2 md:px-4 py-2 text-amber-700 text-sm">
+                    Keluar dari sistem
                   </td>
-                  <td className="px-2 md:px-4 py-2 font-semibold text-gray-900">
-                    Rp {parseFloat(entry.amount || "0").toLocaleString("id-ID")}
+                  <td className="px-2 md:px-4 py-2 font-semibold text-amber-700">
+                    -Rp {transferFee.toLocaleString("id-ID")}
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>

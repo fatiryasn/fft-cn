@@ -30,6 +30,7 @@ export function DetailStep({ form, disabled }: Props) {
     updateEntryAmount,
   } = form;
 
+  //type: relocation
   if (purpose !== "account_transfer") {
     return (
       <div className="space-y-4">
@@ -116,6 +117,7 @@ export function DetailStep({ form, disabled }: Props) {
     );
   }
 
+  //type: income & expense
   return (
     <div className="space-y-4">
       <h3 className="md:text-lg font-semibold">Akun Sumber & Nominal</h3>
