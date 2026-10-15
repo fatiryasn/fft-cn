@@ -19,7 +19,6 @@ export async function getHomeData(): Promise<HomeData> {
   const user = await requireUser();
   const supabase = await createClient();
 
-  console.log("[HOME] Fetching data for user:", user.id);
 
   // 1. Profile
   const { data: profile, error: profileError } = await supabase
@@ -29,54 +28,49 @@ export async function getHomeData(): Promise<HomeData> {
     .single();
 
   if (profileError || !profile) {
-    console.error("[HOME] Profile error:", profileError);
     throw new Error("Gagal memuat profil");
   }
-  console.log("[HOME] Profile:", profile);
 
   // 2. Total balance from view
   const { data: accounts, error: balanceError } = await supabase
     .from("accounts_with_balance")
-    .select("current_balance");
+    .select("current_balance")
+    .eq("user_id", user.id);
 
   if (balanceError) {
-    console.error("[HOME] Balance error:", balanceError);
     throw new Error("Gagal memuat saldo");
   }
-  console.log("[HOME] Raw accounts (count):", accounts.length);
-  console.log("[HOME] Accounts data (first 5):", accounts.slice(0, 5));
 
   const totalBalance = accounts.reduce(
     (sum, acc) => sum + (acc.current_balance ?? 0),
     0,
   );
-  console.log("[HOME] Total balance:", totalBalance);
 
-  // 3. Fetch all transactions for the current month (no aggregation)
+  // 3. Fetch all transactions for the current month.
   const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const startOfMonth = new Date(year, month, 1).toISOString();
-  const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
 
-  console.log("[HOME] Cash flow range:", startOfMonth, "–", endOfMonth);
+  const start = new Date(Date.UTC(year, month, 1));
+  start.setUTCDate(start.getUTCDate() - 1);
+
+  const end = new Date(Date.UTC(year, month + 1, 1));
+  end.setUTCDate(end.getUTCDate() + 1);
+
+  const startIso = start.toISOString();
+  const endIso = end.toISOString();
 
   const { data: transactions, error: txError } = await supabase
     .from("transactions")
     .select("purpose, transaction_at, transaction_entries(signed_amount)")
     .eq("user_id", user.id)
-    .gte("transaction_at", startOfMonth)
-    .lte("transaction_at", endOfMonth);
+    .gte("transaction_at", startIso)
+    .lt("transaction_at", endIso);
 
   if (txError) {
-    console.error("[HOME] Transactions error:", txError);
     throw new Error("Gagal memuat arus kas");
   }
 
-  console.log("[HOME] Raw transactions count:", transactions?.length);
-  console.log("[HOME] Transactions data (first 5):", transactions?.slice(0, 5));
-
-  // Return the raw transactions, client will aggregate by local timezone
   return {
     fullName: profile.full_name,
     totalBalance,
