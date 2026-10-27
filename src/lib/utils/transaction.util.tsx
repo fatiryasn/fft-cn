@@ -80,3 +80,14 @@ export const amountColorClass = (purpose: string) => {
       return "text-gray-700";
   }
 };
+
+
+// date helpers
+export function toIsoStart(date: string): string {
+  return new Date(`${date}T00:00:00`).toISOString();
+}
+export function toIsoEndExclusive(date: string): string {
+  const d = new Date(`${date}T00:00:00`);
+  d.setDate(d.getDate() + 1);
+  return d.toISOString();
+}

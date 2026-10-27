@@ -3,31 +3,35 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { requireUser } from "./auth.service";
+import type {
+  TransactionPurpose,
+  TransactionPurposeFilter,
+  Transaction,
+} from "@/types/transaction";
 
 //INTERFACES
-export interface Transaction {
-  id: string;
-  purpose: "income" | "expense" | "account_transfer";
-  category_name: string | null;
-  note: string | null;
-  amount: number;
-  transaction_at: string;
-  created_at: string;
-  updated_at: string;
-  code?: string;
-}
-interface GetTransactionsParams {
+export type GetTransactionsParams = {
   search?: string;
-  purpose?: string;
+  purpose?: TransactionPurpose;
   page?: number;
   itemsPerPage?: number;
-}
-interface GetPeriodicParams {
+  categoryIds?: string[];
+  accountIds?: string[];
+  dateFrom?: string | null;
+  dateTo?: string | null;
+};
+
+export type GetPeriodicParams = {
   search?: string;
-  purpose?: string;
+  purpose?: TransactionPurposeFilter;
   limit?: number;
   cursor?: string;
-}
+  categoryIds?: string[];
+  accountIds?: string[];
+  dateFrom?: string | null;
+  dateTo?: string | null;
+};
+
 interface TransactionEntryInput {
   account_id: string;
   amount: number;
@@ -40,12 +44,29 @@ interface CreateTransactionInput {
   entries: TransactionEntryInput[];
   attachments?: File[];
 }
+
 interface UpdateTransactionInput {
   note?: string;
   transaction_at?: string;
   category_id?: string | null;
 }
 
+//HELPER
+async function resolveAccountFilterTxIds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  accountIds: string[],
+): Promise<{ txIds: string[] | null; error?: string }> {
+  if (accountIds.length === 0) return { txIds: null };
+
+  const { data, error } = await supabase
+    .from("transaction_entries")
+    .select("transaction_id")
+    .in("account_id", accountIds);
+
+  if (error) return { txIds: null, error: error.message };
+
+  return { txIds: [...new Set((data || []).map((e) => e.transaction_id))] };
+}
 
 //GET TRANSACTIONS
 export async function getTransactions(params: GetTransactionsParams) {
@@ -58,19 +79,24 @@ export async function getTransactions(params: GetTransactionsParams) {
     purpose = "semua",
     page = 1,
     itemsPerPage = 30,
+    categoryIds = [],
+    accountIds = [],
+    dateFrom = null,
+    dateTo = null,
   } = params;
+
+  const { txIds, error: accErr } = await resolveAccountFilterTxIds(
+    supabase,
+    accountIds,
+  );
+  if (accErr) return { error: accErr };
+  if (txIds && txIds.length === 0) return { transactions: [], totalCount: 0 };
 
   let query = supabase
     .from("transactions")
     .select(
       `
-        id,
-        code,
-        purpose,
-        note,
-        transaction_at,
-        created_at,
-        updated_at,
+        id, code, purpose, note, transaction_at, created_at, updated_at,
         categories ( name ),
         transaction_entries ( signed_amount )
       `,
@@ -79,18 +105,19 @@ export async function getTransactions(params: GetTransactionsParams) {
     .eq("user_id", user.id)
     .order("transaction_at", { ascending: false });
 
-if (search) {
-  query = query.or(`note.ilike.%${search}%,code.ilike.%${search}%`);
-}
-  if (purpose !== "semua") {
-    query = query.eq("purpose", purpose);
+  if (search) {
+    query = query.or(`note.ilike.%${search}%,code.ilike.%${search}%`);
   }
+  if (purpose !== "semua") query = query.eq("purpose", purpose);
+  if (categoryIds.length > 0) query = query.in("category_id", categoryIds);
+  if (dateFrom) query = query.gte("transaction_at", dateFrom);
+  if (dateTo) query = query.lt("transaction_at", dateTo);
+  if (txIds) query = query.in("id", txIds);
 
   const from = (page - 1) * itemsPerPage;
   const to = from + itemsPerPage - 1;
 
   const { data, count, error } = await query.range(from, to);
-
   if (error) return { error: error.message };
 
   const transactions: Transaction[] = (data || []).map((t: any) => ({
@@ -108,10 +135,7 @@ if (search) {
     updated_at: t.updated_at,
   }));
 
-  return {
-    transactions,
-    totalCount: count ?? 0,
-  };
+  return { transactions, totalCount: count ?? 0 };
 }
 
 //GET TRANSACTION SUMMARY
@@ -164,36 +188,49 @@ export async function getTransactionsPeriodic(params: GetPeriodicParams) {
   const user = await requireUser();
   if (!user) redirect("/login");
 
-  const { search = "", purpose = "semua", limit = 20, cursor } = params;
+  const {
+    search = "",
+    purpose = "semua",
+    limit = 20,
+    cursor,
+    categoryIds = [],
+    accountIds = [],
+    dateFrom = null,
+    dateTo = null,
+  } = params;
+
+  const { txIds, error: accErr } = await resolveAccountFilterTxIds(
+    supabase,
+    accountIds,
+  );
+  if (accErr) return { error: accErr };
+  if (txIds && txIds.length === 0) {
+    return { transactions: [], hasMore: false, nextCursor: null };
+  }
 
   let query = supabase
     .from("transactions")
     .select(
       `
-        id,
-        purpose,
-        note,
-        transaction_at,
+        id, purpose, note, transaction_at,
         categories ( name ),
         transaction_entries ( signed_amount )
       `,
-      { count: "exact" }
     )
     .eq("user_id", user.id)
     .order("transaction_at", { ascending: false });
 
-if (search) {
-  query = query.or(`note.ilike.%${search}%,code.ilike.%${search}%`);
-}
-  if (purpose !== "semua") {
-    query = query.eq("purpose", purpose);
+  if (search) {
+    query = query.or(`note.ilike.%${search}%,code.ilike.%${search}%`);
   }
-  if (cursor) {
-    query = query.lt("transaction_at", cursor); // keyset pagination
-  }
+  if (purpose !== "semua") query = query.eq("purpose", purpose);
+  if (categoryIds.length > 0) query = query.in("category_id", categoryIds);
+  if (dateFrom) query = query.gte("transaction_at", dateFrom);
+  if (dateTo) query = query.lt("transaction_at", dateTo);
+  if (txIds) query = query.in("id", txIds);
+  if (cursor) query = query.lt("transaction_at", cursor);
 
-  const { data, count, error } = await query.limit(limit);
-
+  const { data, error } = await query.limit(limit);
   if (error) return { error: error.message };
 
   const transactions: Transaction[] = (data || []).map((t: any) => ({
@@ -203,7 +240,7 @@ if (search) {
     note: t.note,
     amount: (t.transaction_entries || []).reduce(
       (sum: number, e: any) => sum + (e.signed_amount || 0),
-      0
+      0,
     ),
     transaction_at: t.transaction_at,
     created_at: t.created_at,
@@ -220,7 +257,7 @@ if (search) {
 //CATEGORY PICKER
 export async function getCategoriesForPurpose(
   purpose: "income" | "expense",
-  search?: string
+  search?: string,
 ) {
   const supabase = await createClient();
   const user = await requireUser();
@@ -433,7 +470,8 @@ export async function getTransactionById(id: string) {
 
   const { data, error } = await supabase
     .from("transactions")
-    .select(`
+    .select(
+      `
       id,
       code,
       purpose,
@@ -454,7 +492,8 @@ export async function getTransactionById(id: string) {
         image_path,
         created_at
       )
-    `)
+    `,
+    )
     .eq("id", id)
     .eq("user_id", user.id)
     .single();
@@ -475,7 +514,7 @@ export async function getTransactionById(id: string) {
         }
 
         return { ...att, image_url: signedData.signedUrl };
-      })
+      }),
     );
   }
 
@@ -485,7 +524,7 @@ export async function getTransactionById(id: string) {
 //UPDATE TRANSACTION
 export async function updateTransaction(
   id: string,
-  input: UpdateTransactionInput
+  input: UpdateTransactionInput,
 ) {
   const supabase = await createClient();
   const user = await requireUser();
@@ -547,12 +586,39 @@ export async function deleteTransaction(id: string) {
       .remove(paths);
 
     if (storageError) {
-      console.error(
-        "Failed to delete storage files:",
-        storageError.message
-      );
+      console.error("Failed to delete storage files:", storageError.message);
     }
   }
 
   return { success: true };
+}
+
+//HELPER for transaction modal
+export async function getAllCategoriesForFilter() {
+  const supabase = await createClient();
+  const user = await requireUser();
+  if (!user) redirect("/login");
+
+  const { data, error } = await supabase
+    .from("categories")
+    .select("id, name, type, description")
+    .eq("user_id", user.id)
+    .order("name", { ascending: true });
+
+  if (error) return { error: error.message };
+  return { categories: data ?? [] };
+}
+export async function getAllAccountsForFilter() {
+  const supabase = await createClient();
+  const user = await requireUser();
+  if (!user) redirect("/login");
+
+  const { data, error } = await supabase
+    .from("accounts_with_balance")
+    .select("id, name, type, current_balance")
+    .eq("user_id", user.id)
+    .order("name", { ascending: true });
+
+  if (error) return { error: error.message };
+  return { accounts: data ?? [] };
 }

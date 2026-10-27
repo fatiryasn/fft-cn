@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   FaCalendar,
@@ -11,28 +12,41 @@ import {
   FaTable,
 } from "react-icons/fa";
 import { FaArrowTrendDown, FaArrowTrendUp } from "react-icons/fa6";
-import DataTable from "@/components/shared/DataTable";
+
+import {
+  type TransactionFilters,
+  type Transaction,
+  DEFAULT_TRANSACTION_FILTERS,
+} from "@/types/transaction";
+
 import {
   getTransactions,
   getTransactionSummary,
   getTransactionsPeriodic,
-  type Transaction,
 } from "@/services/transaction.service";
+
 import { formatRupiah, formatDate } from "@/lib/utils/common.util";
-import { useRouter } from "next/navigation";
 import {
   amountColorClass,
   getTransactionPurposeBadge,
-  purposeLabels,
+  toIsoStart,
+  toIsoEndExclusive,
 } from "@/lib/utils/transaction.util";
+
+import TransactionFilterModal from "./_components/TransactionFilterModal";
+import DataTable from "@/components/shared/DataTable";
 import LoadingState from "@/components/shared/LoadingState";
 import ErrorState from "@/components/shared/ErrorState";
 import EmptyState from "@/components/shared/EmptyState";
+import ActiveFiltersBar, {
+  countActiveFilters,
+} from "./_components/ActiveFiltersBar";
 
 //CONSTANTS
 const DEFAULT_LIMIT_TABLE = 30;
 const PERIODIC_BATCH_SIZE = 20;
 const FETCH_TIMEOUT_MS = 10000;
+const FILTER_DEBOUNCE_MS = 1000;
 
 //DATATABLE COLUMN
 const transactionColumns = [
@@ -101,10 +115,13 @@ const Page = () => {
   //STATES
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [filterPurpose, setFilterPurpose] = useState<
-    "semua" | "income" | "expense" | "account_transfer"
-  >("semua");
-  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [filters, setFilters] = useState<TransactionFilters>(
+    DEFAULT_TRANSACTION_FILTERS,
+  );
+  const [debouncedFilters, setDebouncedFilters] = useState<TransactionFilters>(
+    DEFAULT_TRANSACTION_FILTERS,
+  );
+  const [showFilterModal, setShowFilterModal] = useState(false);
   const [mode, setMode] = useState<"table" | "periodic">("table");
 
   //table states
@@ -120,16 +137,16 @@ const Page = () => {
   const [loadingPeriodic, setLoadingPeriodic] = useState(false);
   const [errorPeriodic, setErrorPeriodic] = useState<string | null>(null);
   const [hasMorePeriodic, setHasMorePeriodic] = useState(true);
-  const [cursorPeriodic, setCursorPeriodic] = useState<string | null>(null);
   const observerRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  // Add these refs near the other refs
   const isFetchingPeriodicRef = useRef(false);
   const cursorPeriodicRef = useRef<string | null>(null);
 
   //summary states
   const [totalIncome, setTotalIncome] = useState(0);
   const [totalExpense, setTotalExpense] = useState(0);
+
+  const activeFilterCount = countActiveFilters(filters);
 
   //periodic grouping
   const groupedByDate = useMemo(() => {
@@ -152,6 +169,7 @@ const Page = () => {
       setTotalExpense(summary.totalExpense);
     } catch (e) {}
   }, []);
+
   //FETCH TABLE DATA
   const fetchTableData = useCallback(async () => {
     setLoadingTable(true);
@@ -159,7 +177,18 @@ const Page = () => {
     try {
       const result = await getTransactions({
         search: debouncedSearch,
-        purpose: filterPurpose,
+        purpose:
+          debouncedFilters.purpose === "semua"
+            ? undefined
+            : debouncedFilters.purpose,
+        categoryIds: debouncedFilters.categoryIds,
+        accountIds: debouncedFilters.accountIds,
+        dateFrom: debouncedFilters.dateFrom
+          ? toIsoStart(debouncedFilters.dateFrom)
+          : null,
+        dateTo: debouncedFilters.dateTo
+          ? toIsoEndExclusive(debouncedFilters.dateTo)
+          : null,
         page: currentPage,
         itemsPerPage: limit,
       });
@@ -175,7 +204,8 @@ const Page = () => {
     } finally {
       setLoadingTable(false);
     }
-  }, [debouncedSearch, filterPurpose, currentPage, limit]);
+  }, [debouncedSearch, debouncedFilters, currentPage, limit]);
+
   //FETCH PERIODIC DATA
   const fetchPeriodic = useCallback(
     async (reset = false) => {
@@ -195,7 +225,15 @@ const Page = () => {
 
         const result = await getTransactionsPeriodic({
           search: debouncedSearch,
-          purpose: filterPurpose,
+          purpose: debouncedFilters.purpose,
+          categoryIds: debouncedFilters.categoryIds,
+          accountIds: debouncedFilters.accountIds,
+          dateFrom: debouncedFilters.dateFrom
+            ? toIsoStart(debouncedFilters.dateFrom)
+            : null,
+          dateTo: debouncedFilters.dateTo
+            ? toIsoEndExclusive(debouncedFilters.dateTo)
+            : null,
           limit: PERIODIC_BATCH_SIZE,
           cursor: cursor || undefined,
         });
@@ -213,7 +251,6 @@ const Page = () => {
 
         setHasMorePeriodic(result.hasMore);
         cursorPeriodicRef.current = result.nextCursor ?? null;
-        setCursorPeriodic(result.nextCursor ?? null);
       } catch (err: any) {
         if (err.name !== "AbortError") {
           setErrorPeriodic(err.message || "Gagal memuat data");
@@ -224,7 +261,7 @@ const Page = () => {
         isFetchingPeriodicRef.current = false;
       }
     },
-    [debouncedSearch, filterPurpose],
+    [debouncedSearch, debouncedFilters],
   );
 
   //INTERSECTION OBSERVER
@@ -252,10 +289,10 @@ const Page = () => {
     };
   }, [mode, hasMorePeriodic, loadingPeriodic, errorPeriodic, fetchPeriodic]);
 
-  //FETCH EFFECTS
+  //EFFECTS
   useEffect(() => {
     fetchSummary();
-  }, []);
+  }, [fetchSummary]);
   useEffect(() => {
     if (mode === "table") {
       fetchTableData();
@@ -266,17 +303,24 @@ const Page = () => {
       setAllTransactions([]);
       setHasMorePeriodic(true);
       cursorPeriodicRef.current = null;
-      setCursorPeriodic(null);
       setErrorPeriodic(null);
       fetchPeriodic(true);
     }
-  }, [mode, debouncedSearch, filterPurpose, fetchPeriodic]);
+  }, [mode, debouncedSearch, debouncedFilters, fetchPeriodic]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search);
     }, 500);
     return () => clearTimeout(timer);
   }, [search]);
+  useEffect(() => {
+    const timer = setTimeout(
+      () => setDebouncedFilters(filters),
+      FILTER_DEBOUNCE_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [filters]);
 
   //HANDLERS
   const handlePageChange = (page: number) => setCurrentPage(page);
@@ -287,6 +331,10 @@ const Page = () => {
   const retryPeriodic = () => {
     setErrorPeriodic(null);
     fetchPeriodic(allTransactions.length === 0);
+  };
+  const handleApplyFilters = (newFilters: TransactionFilters) => {
+    setFilters(newFilters);
+    setCurrentPage(1);
   };
 
   //RENDER
@@ -326,55 +374,18 @@ const Page = () => {
       {/* TOOLBAR */}
       <div className="flex flex-wrap gap-3">
         {/* Filter */}
-        <div className="relative order-1">
-          <button
-            onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-            className="flex items-center gap-2 bg-surface hover:bg-gray-100 transition px-3 sm:px-5 py-2 rounded-lg border border-gray-200 shadow flex-shrink-0"
-          >
-            <FaFilter />
-            <span className="hidden md:inline">Filter</span>
-            {filterPurpose !== "semua" && (
-              <span className="ml-1 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full capitalize">
-                {purposeLabels[filterPurpose] || filterPurpose}
-              </span>
-            )}
-          </button>
-          {showFilterDropdown && (
-            <div className="absolute left-0 mt-1 w-48 bg-surface border border-gray-200 rounded-lg shadow-lg z-10">
-              <div className="absolute left-0 mt-1 w-48 bg-surface border border-gray-200 rounded-lg shadow-lg z-10">
-                <button
-                  onClick={() => {
-                    setFilterPurpose("semua");
-                    setShowFilterDropdown(false);
-                  }}
-                  className={`block w-full text-left px-4 py-2 text-xs md:text-sm hover:bg-gray-100 ${
-                    filterPurpose === "semua"
-                      ? "bg-blue-50 text-blue-700 font-medium"
-                      : ""
-                  }`}
-                >
-                  Semua
-                </button>
-                {Object.entries(purposeLabels).map(([value, label]) => (
-                  <button
-                    key={value}
-                    onClick={() => {
-                      setFilterPurpose(value as any);
-                      setShowFilterDropdown(false);
-                    }}
-                    className={`block w-full text-left px-4 py-2 text-xs md:text-sm hover:bg-gray-100 ${
-                      filterPurpose === value
-                        ? "bg-blue-50 text-blue-700 font-medium"
-                        : ""
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
+        <button
+          onClick={() => setShowFilterModal(true)}
+          className="flex items-center gap-2 bg-surface hover:bg-gray-100 transition px-3 sm:px-5 py-2 rounded-lg border border-gray-200 shadow flex-shrink-0 order-1"
+        >
+          <FaFilter />
+          <span className="hidden md:inline">Filter</span>
+          {activeFilterCount > 0 && (
+            <span className="ml-1 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+              {activeFilterCount}
+            </span>
           )}
-        </div>
+        </button>
 
         {/* Search */}
         <div className="flex items-center gap-2 border border-gray-200 shadow rounded-lg px-4 py-4 sm:py-2 bg-surface w-full sm:w-auto order-4 sm:order-2">
@@ -383,12 +394,15 @@ const Page = () => {
             type="text"
             placeholder="Cari transaksi..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setCurrentPage(1);
+            }}
             className="w-full sm:w-40 lg:w-56 text-xs md:text-sm focus:outline-none bg-transparent"
           />
         </div>
 
-        {/* Spacer – only visible on sm+ screens, pushes mode & tambah to the right */}
+        {/* Spacer */}
         <div className="hidden sm:flex flex-1 order-3" />
 
         {/* Mode Toggle */}
@@ -425,6 +439,15 @@ const Page = () => {
           <FaPlus /> Tambah
         </Link>
       </div>
+
+      {/* ACTIVE FILTERS */}
+      <ActiveFiltersBar
+        filters={filters}
+        onChange={(next) => {
+          setFilters(next);
+          setCurrentPage(1);
+        }}
+      />
 
       {/* DATA */}
       {mode === "table" ? (
@@ -521,6 +544,14 @@ const Page = () => {
             )}
         </div>
       )}
+
+      {/* FILTER MODAL */}
+      <TransactionFilterModal
+        isOpen={showFilterModal}
+        onClose={() => setShowFilterModal(false)}
+        filters={filters}
+        onApply={handleApplyFilters}
+      />
     </div>
   );
 };
