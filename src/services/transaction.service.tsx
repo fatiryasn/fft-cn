@@ -40,14 +40,16 @@ interface CreateTransactionInput {
   purpose: "income" | "expense" | "account_transfer";
   category_id?: string | null;
   note?: string;
-  transaction_at: string;
+  transaction_date: string;
+  transaction_time?: string | null;
   entries: TransactionEntryInput[];
   attachments?: File[];
 }
 
 interface UpdateTransactionInput {
   note?: string;
-  transaction_at?: string;
+  transaction_date?: string;
+  transaction_time?: string | null;
   category_id?: string | null;
 }
 
@@ -96,22 +98,22 @@ export async function getTransactions(params: GetTransactionsParams) {
     .from("transactions")
     .select(
       `
-        id, code, purpose, note, transaction_at, created_at, updated_at,
+        id, code, purpose, note, transaction_date, transaction_time, created_at, updated_at,
         categories ( name ),
         transaction_entries ( signed_amount )
       `,
       { count: "exact" },
     )
     .eq("user_id", user.id)
-    .order("transaction_at", { ascending: false });
+    .order("transaction_date", { ascending: false });
 
   if (search) {
     query = query.or(`note.ilike.%${search}%,code.ilike.%${search}%`);
   }
   if (purpose !== "semua") query = query.eq("purpose", purpose);
   if (categoryIds.length > 0) query = query.in("category_id", categoryIds);
-  if (dateFrom) query = query.gte("transaction_at", dateFrom);
-  if (dateTo) query = query.lt("transaction_at", dateTo);
+  if (dateFrom) query = query.gte("transaction_date", dateFrom);
+  if (dateTo) query = query.lte("transaction_date", dateTo);
   if (txIds) query = query.in("id", txIds);
 
   const from = (page - 1) * itemsPerPage;
@@ -130,7 +132,8 @@ export async function getTransactions(params: GetTransactionsParams) {
       (sum: number, e: any) => sum + (e.signed_amount || 0),
       0,
     ),
-    transaction_at: t.transaction_at,
+    transaction_date: t.transaction_date,
+    transaction_time: t.transaction_time,
     created_at: t.created_at,
     updated_at: t.updated_at,
   }));
@@ -212,23 +215,23 @@ export async function getTransactionsPeriodic(params: GetPeriodicParams) {
     .from("transactions")
     .select(
       `
-        id, purpose, note, transaction_at,
+        id, purpose, note, transaction_date, transaction_date, transaction_time,
         categories ( name ),
         transaction_entries ( signed_amount )
       `,
     )
     .eq("user_id", user.id)
-    .order("transaction_at", { ascending: false });
+    .order("transaction_date", { ascending: false });
 
   if (search) {
     query = query.or(`note.ilike.%${search}%,code.ilike.%${search}%`);
   }
   if (purpose !== "semua") query = query.eq("purpose", purpose);
   if (categoryIds.length > 0) query = query.in("category_id", categoryIds);
-  if (dateFrom) query = query.gte("transaction_at", dateFrom);
-  if (dateTo) query = query.lt("transaction_at", dateTo);
+  if (dateFrom) query = query.gte("transaction_date", dateFrom);
+  if (dateTo) query = query.lte("transaction_date", dateTo);
   if (txIds) query = query.in("id", txIds);
-  if (cursor) query = query.lt("transaction_at", cursor);
+  if (cursor) query = query.lt("transaction_date", cursor);
 
   const { data, error } = await query.limit(limit);
   if (error) return { error: error.message };
@@ -242,7 +245,8 @@ export async function getTransactionsPeriodic(params: GetPeriodicParams) {
       (sum: number, e: any) => sum + (e.signed_amount || 0),
       0,
     ),
-    transaction_at: t.transaction_at,
+    transaction_date: t.transaction_date,
+    transaction_time: t.transaction_time,
     created_at: t.created_at,
     updated_at: t.updated_at,
   }));
@@ -250,7 +254,7 @@ export async function getTransactionsPeriodic(params: GetPeriodicParams) {
   return {
     transactions,
     hasMore: (data?.length ?? 0) === limit,
-    nextCursor: data?.length ? data[data.length - 1].transaction_at : null,
+    nextCursor: data?.length ? data[data.length - 1].transaction_date : null,
   };
 }
 
@@ -308,8 +312,15 @@ export async function createTransaction(input: CreateTransactionInput) {
   const user = await requireUser();
   if (!user) redirect("/login");
 
-  const { purpose, category_id, note, transaction_at, entries, attachments } =
-    input;
+  const {
+    purpose,
+    category_id,
+    note,
+    transaction_date,
+    transaction_time,
+    entries,
+    attachments,
+  } = input;
 
   //validate
   // validate purpose
@@ -324,14 +335,25 @@ export async function createTransaction(input: CreateTransactionInput) {
     return { error: "Keterangan maksimal 300 karakter" };
   }
   // validate date
-  if (!transaction_at || isNaN(Date.parse(transaction_at))) {
+  if (!transaction_date || !/^\d{4}-\d{2}-\d{2}$/.test(transaction_date)) {
+    return { error: "Format tanggal tidak valid" };
+  }
+  if (isNaN(Date.parse(transaction_date))) {
     return { error: "Tanggal transaksi tidak valid" };
   }
-  // validate entries is an array
+  // validate time
+  if (
+    transaction_time !== undefined &&
+    transaction_time !== null &&
+    !/^\d{2}:\d{2}(:\d{2})?$/.test(transaction_time)
+  ) {
+    return { error: "Format waktu tidak valid" };
+  }
+  //validate entries is an array
   if (!Array.isArray(entries) || entries.length === 0) {
     return { error: "Minimal satu akun harus diisi" };
   }
-  // validate each entry amount
+  //validate each entry amount
   for (const entry of entries) {
     if (!entry.account_id) {
       return { error: "Akun harus dipilih" };
@@ -398,7 +420,8 @@ export async function createTransaction(input: CreateTransactionInput) {
         purpose,
         category_id: category_id || null,
         note: note || null,
-        transaction_at,
+        transaction_date,
+        transaction_time: transaction_time ?? null,
       })
       .select("id")
       .single();
@@ -462,7 +485,7 @@ export async function createTransaction(input: CreateTransactionInput) {
   }
 }
 
-// GET TRANSACTION BY ID
+//GET TRANSACTION BY ID
 export async function getTransactionById(id: string) {
   const supabase = await createClient();
   const user = await requireUser();
@@ -476,7 +499,8 @@ export async function getTransactionById(id: string) {
       code,
       purpose,
       note,
-      transaction_at,
+      transaction_date,
+      transaction_time,
       created_at,
       updated_at,
       category_id,
@@ -500,13 +524,13 @@ export async function getTransactionById(id: string) {
 
   if (error) return { error: error.message };
 
-  // If transaction has attachments, generate signed URLs for private bucket access
+  //handle existing attachments
   if (data?.transaction_attachments) {
     data.transaction_attachments = await Promise.all(
       data.transaction_attachments.map(async (att: any) => {
         const { data: signedData, error: signedError } = await supabase.storage
           .from("uploads")
-          .createSignedUrl(att.image_path, 600); // valid for 10 minutes
+          .createSignedUrl(att.image_path, 600);
 
         if (signedError) {
           console.error("Error creating signed URL:", signedError);
@@ -521,7 +545,7 @@ export async function getTransactionById(id: string) {
   return { transaction: data };
 }
 
-//UPDATE TRANSACTION
+// UPDATE TRANSACTION
 export async function updateTransaction(
   id: string,
   input: UpdateTransactionInput,
@@ -530,18 +554,36 @@ export async function updateTransaction(
   const user = await requireUser();
   if (!user) redirect("/login");
 
+  // ── validation ──
   if (input.note !== undefined && input.note.length > 300) {
     return { error: "Keterangan maksimal 300 karakter" };
   }
-  if (input.transaction_at && isNaN(Date.parse(input.transaction_at))) {
-    return { error: "Tanggal tidak valid" };
+
+  if (input.transaction_date !== undefined) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.transaction_date)) {
+      return { error: "Format tanggal tidak valid" };
+    }
+    if (isNaN(Date.parse(input.transaction_date))) {
+      return { error: "Tanggal tidak valid" };
+    }
+  }
+
+  if (
+    input.transaction_time !== undefined &&
+    input.transaction_time !== null
+  ) {
+    // accept "HH:MM" or "HH:MM:SS"
+    if (!/^\d{2}:\d{2}(:\d{2})?$/.test(input.transaction_time)) {
+      return { error: "Format waktu tidak valid" };
+    }
   }
 
   const { error } = await supabase
     .from("transactions")
     .update({
       note: input.note,
-      transaction_at: input.transaction_at,
+      transaction_date: input.transaction_date,
+      transaction_time: input.transaction_time,
       category_id: input.category_id,
     })
     .eq("id", id)

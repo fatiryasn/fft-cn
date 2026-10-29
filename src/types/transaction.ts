@@ -24,7 +24,8 @@ export interface Transaction {
   category_name: string | null;
   note: string | null;
   amount: number;
-  transaction_at: string;
+  transaction_date: string;
+  transaction_time: string | null;
   created_at: string;
   updated_at: string;
   code?: string;

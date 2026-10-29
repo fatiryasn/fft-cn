@@ -92,7 +92,7 @@ const Page = () => {
     const dailyMap: Record<string, { income: number; expense: number }> = {};
 
     data.transactions.forEach((tx) => {
-      const localDate = new Date(tx.transaction_at).toLocaleDateString("sv-SE");
+      const localDate = new Date(tx.transaction_date).toLocaleDateString("sv-SE");
 
       const netAmount = tx.transaction_entries.reduce(
         (sum, e) => sum + (e.signed_amount ?? 0),

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   FaCalendar,
+  FaClock,
   FaFilter,
   FaPlus,
   FaSearch,
@@ -32,6 +33,12 @@ import {
   toIsoStart,
   toIsoEndExclusive,
 } from "@/lib/utils/transaction.util";
+import {
+  DEFAULT_LIMIT_TABLE,
+  PERIODIC_BATCH_SIZE,
+  FETCH_TIMEOUT_MS,
+  FILTER_DEBOUNCE_MS,
+} from "@/lib/constants/transaction-data";
 
 import TransactionFilterModal from "./_components/TransactionFilterModal";
 import DataTable from "@/components/shared/DataTable";
@@ -41,12 +48,6 @@ import EmptyState from "@/components/shared/EmptyState";
 import ActiveFiltersBar, {
   countActiveFilters,
 } from "./_components/ActiveFiltersBar";
-
-//CONSTANTS
-const DEFAULT_LIMIT_TABLE = 30;
-const PERIODIC_BATCH_SIZE = 20;
-const FETCH_TIMEOUT_MS = 10000;
-const FILTER_DEBOUNCE_MS = 1000;
 
 //DATATABLE COLUMN
 const transactionColumns = [
@@ -103,7 +104,8 @@ const transactionColumns = [
     header: "Tanggal",
     render: (row: Transaction) => (
       <span className="text-gray-900 max-w-[200px] truncate block text-sm xl:text-base">
-        {formatDate(row.transaction_at)}
+        {formatDate(row.transaction_date, false)}{" "}
+        {row.transaction_time && ` - ${row.transaction_time?.slice(0, 5)}`}
       </span>
     ),
   },
@@ -152,7 +154,7 @@ const Page = () => {
   const groupedByDate = useMemo(() => {
     const groupsMap: Record<string, Transaction[]> = {};
     allTransactions.forEach((tx) => {
-      const localDate = new Date(tx.transaction_at).toLocaleDateString("sv-SE");
+      const localDate = new Date(tx.transaction_date).toLocaleDateString("sv-SE");
       if (!groupsMap[localDate]) groupsMap[localDate] = [];
       groupsMap[localDate].push(tx);
     });
@@ -483,7 +485,7 @@ const Page = () => {
               className="bg-surface border border-gray-200 shadow rounded-xl overflow-hidden"
             >
               <div className="bg-secondary/5 border-b border-gray-200 px-5 py-3">
-                <h3 className="font-semibold text-secondary text-xs md:text-sm tracking-wide">
+                <h3 className="font-semibold text-gray-800 text-xs md:text-sm tracking-wide">
                   {new Date(date).toLocaleDateString("id-ID", {
                     weekday: "long",
                     day: "numeric",
@@ -500,23 +502,39 @@ const Page = () => {
                     onClick={() => router.push(`/app/transaksi/${t.id}`)}
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium font-lexend text-gray-900 text-sm md:text-base">
-                        {t.note || "Tanpa keterangan"}
+                      <p className="font-medium font-lexend text-gray-900 text-sm md:text-base xl:text-lg">
+                        {t.note || "[NO NOTE]"}
                       </p>
                       <p className="text-xs text-gray-600 mt-0.5">
-                        {t.category_name || "Tanpa kategori"} &middot; {t.code}
+                        {t.category_name || "[NO CATEGORY]"} &middot; {t.code}
                       </p>
                     </div>
                     <div className="text-right ml-4">
-                      {getTransactionPurposeBadge(
-                        t.purpose,
-                        "text-xs md:text-sm",
-                      )}
-                      <p
-                        className={`text-sm font-semibold ${amountColorClass(t.purpose)}`}
-                      >
-                        {formatRupiah(Math.abs(t.amount))}
-                      </p>
+                      <div className="flex items-center justify-end gap-1">
+                        {t.transaction_time && (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-semibold bg-gray-100 text-gray-800 text-xs md:text-sm">
+                            <FaClock className="text-gray-600" />
+                            {t.transaction_time.slice(0, 5)}
+                          </span>
+                        )}
+
+                        {getTransactionPurposeBadge(
+                          t.purpose,
+                          "text-xs md:text-sm",
+                        )}
+                      </div>
+                      <div className="flex items-center justify-end gap-1">
+                        <p
+                          className={`text-sm font-semibold ${amountColorClass(t.purpose)}`}
+                        >
+                          {formatRupiah(Math.abs(t.amount))}
+                        </p>
+                        {t.purpose === "account_transfer" && t.amount === 0 && (
+                          <span className="text-gray-400 text-xs">
+                            (seimbang)
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}

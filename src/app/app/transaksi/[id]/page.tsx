@@ -11,12 +11,7 @@ import {
   deleteTransaction,
 } from "@/services/transaction.service";
 import Spinner from "@/components/shared/Spinner";
-import {
-  buildISOString,
-  formatDate,
-  formatRupiah,
-  parseLocalDateTime,
-} from "@/lib/utils/common.util";
+import { formatDate, formatRupiah } from "@/lib/utils/common.util";
 import { useTitle } from "@/context/TitleContext";
 import { getAccountTypeBadge } from "@/lib/utils/account.util";
 import { getTransactionPurposeBadge } from "@/lib/utils/transaction.util";
@@ -24,20 +19,22 @@ import CategoryPicker from "@/components/shared/CategoryPicker";
 import LoadingState from "@/components/shared/LoadingState";
 import FieldError from "@/components/shared/FieldError";
 
+const toHHMM = (time?: string | null) => (time ? time.slice(0, 5) : "");
+
 const Page = () => {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { setTitle } = useTitle();
 
-  // ── Transaction data ──────────────────────────────────
+  //transaction data
   const [transaction, setTransaction] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  // ── Edit mode ─────────────────────────────────────────
+  //edit mode
   const [isEditing, setIsEditing] = useState(false);
   const [formNote, setFormNote] = useState("");
-  const [formDate, setFormDate] = useState("");
+  const [formDate, setFormDate] = useState(""); 
   const [formTime, setFormTime] = useState("00:00");
   const [formUseSpecificTime, setFormUseSpecificTime] = useState(false);
   const [formCategoryId, setFormCategoryId] = useState<string | null>(null);
@@ -47,10 +44,7 @@ const Page = () => {
   const [isSaving, startSaving] = useTransition();
   const [isDeleting, startDeleting] = useTransition();
 
-  // ── Category picker (only state needed) ───────────────
   const [showCategoryPopup, setShowCategoryPopup] = useState(false);
-
-  // ── Fullscreen image overlay ──────────────────────────
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
 
   const totalAmount =
@@ -59,17 +53,16 @@ const Page = () => {
       0,
     ) || 0;
 
-  // ── Detect changes ────────────────────────────────────
+  //DETECT CHANGES
   const hasChanges = useCallback(() => {
     if (!transaction) return false;
-    const originalDate = transaction.transaction_at
-      ? parseLocalDateTime(transaction.transaction_at)
-      : { date: "", time: "" };
-    const originalTime = originalDate.time === "00:00" ? "" : originalDate.time;
+    const originalTime = transaction.transaction_time
+      ? toHHMM(transaction.transaction_time)
+      : "";
     const currentTime = formUseSpecificTime ? formTime : "";
     return (
       formNote !== (transaction.note || "") ||
-      formDate !== originalDate.date ||
+      formDate !== (transaction.transaction_date || "") ||
       currentTime !== originalTime ||
       formCategoryId !== transaction.category_id
     );
@@ -82,7 +75,7 @@ const Page = () => {
     transaction,
   ]);
 
-  //FETCH TRANSACTIONS
+  //FETCH TRX
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -94,17 +87,13 @@ const Page = () => {
         setTransaction(tx);
 
         setFormNote(tx.note || "");
-        if (tx.transaction_at) {
-          const { date, time } = parseLocalDateTime(tx.transaction_at);
-          setFormDate(date);
-          setFormTime(time);
-          setFormUseSpecificTime(time !== "00:00");
-        } else {
-          const now = new Date();
-          setFormDate(now.toISOString().slice(0, 10));
-          setFormTime("00:00");
-          setFormUseSpecificTime(false);
-        }
+        setFormDate(
+          tx.transaction_date || new Date().toISOString().slice(0, 10),
+        );
+        setFormTime(
+          tx.transaction_time ? toHHMM(tx.transaction_time) : "00:00",
+        );
+        setFormUseSpecificTime(!!tx.transaction_time);
 
         setFormCategoryId(tx.category_id);
         const categoryName =
@@ -124,15 +113,18 @@ const Page = () => {
     };
   }, [id, setTitle]);
 
-  //EDIT MODE HANDLERS
+  //EDIT MODE
   const handleEdit = () => {
     if (!transaction) return;
-    if (transaction.transaction_at) {
-      const { date, time } = parseLocalDateTime(transaction.transaction_at);
-      setFormDate(date);
-      setFormTime(time);
-      setFormUseSpecificTime(time !== "00:00");
-    }
+    setFormDate(
+      transaction.transaction_date || new Date().toISOString().slice(0, 10),
+    );
+    setFormTime(
+      transaction.transaction_time
+        ? toHHMM(transaction.transaction_time)
+        : "00:00",
+    );
+    setFormUseSpecificTime(!!transaction.transaction_time);
     setFormNote(transaction.note || "");
     setFormCategoryId(transaction.category_id);
     const categoryName =
@@ -144,16 +136,20 @@ const Page = () => {
     setIsEditing(true);
   };
 
+  //CANCEL
   const handleCancel = () => {
     setIsEditing(false);
     setEditErrors({});
     if (transaction) {
-      const { date, time } = parseLocalDateTime(
-        transaction.transaction_at || "",
+      setFormDate(
+        transaction.transaction_date || new Date().toISOString().slice(0, 10),
       );
-      setFormDate(date);
-      setFormTime(time);
-      setFormUseSpecificTime(time !== "00:00");
+      setFormTime(
+        transaction.transaction_time
+          ? toHHMM(transaction.transaction_time)
+          : "00:00",
+      );
+      setFormUseSpecificTime(!!transaction.transaction_time);
       setFormNote(transaction.note || "");
       setFormCategoryId(transaction.category_id);
       const categoryName =
@@ -165,6 +161,7 @@ const Page = () => {
     }
   };
 
+  //SAVE
   const handleSave = () => {
     const newErrors: Record<string, string> = {};
     if (!formNote.trim()) newErrors.note = "Keterangan wajib diisi";
@@ -173,15 +170,13 @@ const Page = () => {
     setEditErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
 
-    const isoString = buildISOString(
-      formDate,
-      formUseSpecificTime ? formTime : "00:00",
-    );
+    const nextTime = formUseSpecificTime ? formTime : null;
 
     startSaving(async () => {
       const result = await updateTransaction(id, {
         note: formNote,
-        transaction_at: isoString,
+        transaction_date: formDate,
+        transaction_time: nextTime,
         category_id: formCategoryId || null,
       });
 
@@ -194,7 +189,8 @@ const Page = () => {
       setTransaction((prev: any) => ({
         ...prev,
         note: formNote,
-        transaction_at: isoString,
+        transaction_date: formDate,
+        transaction_time: nextTime,
         category_id: formCategoryId,
         categories: formCategoryId ? { name: formCategoryName } : null,
         updated_at: new Date().toISOString(),
@@ -215,7 +211,7 @@ const Page = () => {
     closeCategoryPopup();
   };
 
-  //DELETE HANDLER
+  //DELETE
   const handleDelete = () => {
     Swal.fire({
       title: "Hapus transaksi?",
@@ -241,10 +237,8 @@ const Page = () => {
     });
   };
 
-  //RENDER
-  if (loading) {
-    return <LoadingState />;
-  }
+  //render
+  if (loading) return <LoadingState />;
 
   if (fetchError || !transaction) {
     return (
@@ -289,9 +283,7 @@ const Page = () => {
                 onChange={(e) => setFormNote(e.target.value)}
                 maxLength={300}
                 rows={2}
-                className={`w-full px-3 py-2 border shadow rounded-lg focus:outline-none text-sm md:text-base
-                border-gray-200
-                `}
+                className="w-full px-3 py-2 border border-gray-200 shadow rounded-lg focus:outline-none text-sm md:text-base"
               />
               {editErrors.note && <FieldError message={editErrors.note} />}
             </>
@@ -329,7 +321,7 @@ const Page = () => {
                   type="time"
                   value={formTime}
                   onChange={(e) => setFormTime(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 shadow rounded-lg focus:outline-none  text-sm md:text-base"
+                  className="w-full px-3 py-2 border border-gray-200 shadow rounded-lg focus:outline-none text-sm md:text-base"
                 />
               )}
               {editErrors.date && <FieldError message={editErrors.date} />}
@@ -337,7 +329,13 @@ const Page = () => {
             </div>
           ) : (
             <p className="text-sm md:text-base text-gray-900 font-lexend">
-              {formatDate(transaction.transaction_at)}
+              {formatDate(transaction.transaction_date, false)}
+              {transaction.transaction_time && (
+                <>
+                  {" - "}
+                  {toHHMM(transaction.transaction_time)}
+                </>
+              )}
             </p>
           )}
         </div>

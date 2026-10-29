@@ -5,7 +5,7 @@ import { requireUser } from "./auth.service";
 
 export type TransactionForCashFlow = {
   purpose: string;
-  transaction_at: string;
+  transaction_date: string;
   transaction_entries: { signed_amount: number }[];
 };
 
@@ -19,8 +19,7 @@ export async function getHomeData(): Promise<HomeData> {
   const user = await requireUser();
   const supabase = await createClient();
 
-
-  // 1. Profile
+  //PROFILE
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("full_name")
@@ -31,7 +30,7 @@ export async function getHomeData(): Promise<HomeData> {
     throw new Error("Gagal memuat profil");
   }
 
-  // 2. Total balance from view
+  //TOTAL BALANCE
   const { data: accounts, error: balanceError } = await supabase
     .from("accounts_with_balance")
     .select("current_balance")
@@ -46,26 +45,24 @@ export async function getHomeData(): Promise<HomeData> {
     0,
   );
 
-  // 3. Fetch all transactions for the current month.
+  //CURRENT MONTH CASH FLOW
   const now = new Date();
-  const year = now.getUTCFullYear();
-  const month = now.getUTCMonth();
+  const year = now.getFullYear();
+  const month = now.getMonth();
 
-  const start = new Date(Date.UTC(year, month, 1));
-  start.setUTCDate(start.getUTCDate() - 1);
+  const pad = (n: number) => String(n).padStart(2, "0");
 
-  const end = new Date(Date.UTC(year, month + 1, 1));
-  end.setUTCDate(end.getUTCDate() + 1);
-
-  const startIso = start.toISOString();
-  const endIso = end.toISOString();
+  const startDate = `${year}-${pad(month + 1)}-01`;
+  const nextMonth = month === 11 ? 0 : month + 1;
+  const nextYear = month === 11 ? year + 1 : year;
+  const endDate = `${nextYear}-${pad(nextMonth + 1)}-01`;
 
   const { data: transactions, error: txError } = await supabase
     .from("transactions")
-    .select("purpose, transaction_at, transaction_entries(signed_amount)")
+    .select("purpose, transaction_date, transaction_entries(signed_amount)")
     .eq("user_id", user.id)
-    .gte("transaction_at", startIso)
-    .lt("transaction_at", endIso);
+    .gte("transaction_date", startDate)
+    .lt("transaction_date", endDate);
 
   if (txError) {
     throw new Error("Gagal memuat arus kas");

@@ -158,13 +158,12 @@ export function useTransactionForm() {
     if (Object.keys(e).length > 0) return;
 
     setIsSubmitting(true);
-    const timePart = useSpecificTime ? transactionTime : "00:00";
-    const combined = `${transactionDate}T${timePart}:00`;
     const result = await createTransaction({
       purpose: purpose!,
       category_id: categoryId || null,
       note: note.trim() || undefined,
-      transaction_at: new Date(combined).toISOString(),
+      transaction_date: transactionDate,
+      transaction_time: useSpecificTime ? transactionTime : null,
       entries: entries.map((en) => ({
         account_id: en.account_id,
         amount: parseFloat(en.amount),
