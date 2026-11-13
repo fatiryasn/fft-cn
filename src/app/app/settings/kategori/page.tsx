@@ -121,6 +121,20 @@ const Page = () => {
   }, []);
 
   //EFFECTS
+   useEffect(() => {
+     const handleResize = () => {
+       if (window.innerWidth < 640) {
+         setMode("grid");
+       } else {
+         setMode("table");
+       }
+     };
+
+     handleResize();
+
+     window.addEventListener("resize", handleResize);
+     return () => window.removeEventListener("resize", handleResize);
+   }, []);
   useEffect(() => {
     fetchSummary();
   }, []);
@@ -247,7 +261,7 @@ const Page = () => {
         <div className="hidden sm:flex flex-1 order-3" />
 
         {/* Mode Toggle */}
-        <div className="flex items-center bg-surface border border-gray-200 shadow rounded-lg order-2 sm:order-4 flex-shrink-0">
+        <div className="hidden sm:flex items-center bg-surface border border-gray-200 shadow rounded-lg order-2 sm:order-4 flex-shrink-0">
           <button
             onClick={() => setMode("table")}
             className={`flex items-center gap-2 px-3 sm:px-5 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -309,24 +323,50 @@ const Page = () => {
       {/* Grid Mode */}
       {!loading && !error && categories.length > 0 && mode === "grid" && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {categories.map((cat) => (
               <div
                 key={cat.id}
-                className="bg-surface border border-gray-200 shadow rounded-xl p-4 sm:p-5 hover:shadow-md transition-shadow cursor-pointer"
                 onClick={() => router.push(`/app/settings/kategori/${cat.id}`)}
+                className="group relative overflow-hidden bg-surface border border-gray-300/80 rounded-2xl p-5 cursor-pointer transition-all duration-300 hover:shadow-md hover:border-secondary/30"
               >
-                <div className="flex justify-between items-start mb-3">
-                  <h3 className="font-semibold text-gray-900 text-base sm:text-lg truncate pr-2">
-                    {cat.name}
-                  </h3>
-                  {getCategoryTypeBadge(cat.type, "text-xs")}
+                {/* Header */}
+                <div className="relative flex items-start justify-between gap-3 mb-5">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={`flex-shrink-0 w-8 h-8 rounded-xl ${
+                        cat.type === "income"
+                          ? "bg-green-100 text-green-800"
+                          : "bg-red-100 text-red-800"
+                      } flex items-center justify-center`}
+                    >
+                      {cat.type === "income" ? (
+                        <FaArrowTrendUp />
+                      ) : (
+                        <FaArrowTrendDown />
+                      )}
+                    </div>
+
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-gray-800 text-base truncate transition-colors">
+                        {cat.name}
+                      </h3>
+                    </div>
+                  </div>
+
+                  <div className="flex-shrink-0">
+                    {getCategoryTypeBadge(cat.type, "text-xs")}
+                  </div>
                 </div>
-                <p className="text-sm text-gray-800 mb-3 truncate">
-                  {truncateDescription(cat.description, 50)}
-                </p>
-                <div className="pt-2 border-t border-gray-100 text-xs text-gray-600">
-                  {formatDate(cat.created_at)}
+
+                {/* Description */}
+                <div className="relative mb-4">
+                  <p className="text-xs font-medium text-gray-600 mb-1">
+                    Deskripsi
+                  </p>
+                  <p className="text-sm text-gray-800 truncate">
+                    {truncateDescription(cat.description, 50)}
+                  </p>
                 </div>
               </div>
             ))}

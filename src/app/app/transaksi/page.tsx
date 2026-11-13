@@ -125,6 +125,8 @@ const Page = () => {
   );
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [mode, setMode] = useState<"table" | "periodic">("table");
+  const [isMobile, setIsMobile] = useState(false);
+  const [screenReady, setScreenReady] = useState(false);
 
   //table states
   const [currentPage, setCurrentPage] = useState(1);
@@ -154,7 +156,9 @@ const Page = () => {
   const groupedByDate = useMemo(() => {
     const groupsMap: Record<string, Transaction[]> = {};
     allTransactions.forEach((tx) => {
-      const localDate = new Date(tx.transaction_date).toLocaleDateString("sv-SE");
+      const localDate = new Date(tx.transaction_date).toLocaleDateString(
+        "sv-SE",
+      );
       if (!groupsMap[localDate]) groupsMap[localDate] = [];
       groupsMap[localDate].push(tx);
     });
@@ -268,7 +272,8 @@ const Page = () => {
 
   //INTERSECTION OBSERVER
   useEffect(() => {
-    if (mode !== "periodic") return;
+    if (!screenReady || mode !== "periodic") return;
+
     const observer = new IntersectionObserver(
       (entries) => {
         if (
@@ -289,26 +294,48 @@ const Page = () => {
     return () => {
       if (el) observer.unobserve(el);
     };
-  }, [mode, hasMorePeriodic, loadingPeriodic, errorPeriodic, fetchPeriodic]);
+  }, [
+    screenReady,
+    mode,
+    hasMorePeriodic,
+    loadingPeriodic,
+    errorPeriodic,
+    fetchPeriodic,
+  ]);
 
   //EFFECTS
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 640;
+
+      setIsMobile(mobile);
+      setMode(mobile ? "periodic" : "table");
+      setScreenReady(true);
+    };
+
+    handleResize();
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
   useEffect(() => {
     fetchSummary();
   }, [fetchSummary]);
   useEffect(() => {
-    if (mode === "table") {
+    if (!screenReady || isMobile || mode !== "table") return;
       fetchTableData();
-    }
-  }, [fetchTableData, mode]);
+
+  }, [fetchTableData, mode, screenReady, isMobile]);
   useEffect(() => {
-    if (mode === "periodic") {
-      setAllTransactions([]);
-      setHasMorePeriodic(true);
-      cursorPeriodicRef.current = null;
-      setErrorPeriodic(null);
-      fetchPeriodic(true);
-    }
-  }, [mode, debouncedSearch, debouncedFilters, fetchPeriodic]);
+    if (!screenReady || mode !== "periodic") return;
+
+    setAllTransactions([]);
+    setHasMorePeriodic(true);
+    cursorPeriodicRef.current = null;
+    setErrorPeriodic(null);
+
+    fetchPeriodic(true);
+  }, [mode, debouncedSearch, debouncedFilters, fetchPeriodic, screenReady]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -408,7 +435,7 @@ const Page = () => {
         <div className="hidden sm:flex flex-1 order-3" />
 
         {/* Mode Toggle */}
-        <div className="flex items-center bg-surface border border-gray-200 shadow rounded-lg order-2 sm:order-4 flex-shrink-0">
+        <div className="hidden sm:flex items-center bg-surface border border-gray-200 shadow rounded-lg order-2 sm:order-4 flex-shrink-0">
           <button
             onClick={() => setMode("table")}
             className={`flex items-center gap-2 px-3 sm:px-5 py-2 rounded-md text-sm font-medium transition-colors ${

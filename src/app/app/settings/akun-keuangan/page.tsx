@@ -136,6 +136,21 @@ const Page = () => {
 
   //EFFECTS
   useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 640) {
+        setMode("grid");
+      } else {
+        setMode("table");
+      }
+    };
+
+    handleResize();
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
     fetchSummary();
   }, []);
   useEffect(() => {
@@ -260,7 +275,7 @@ const Page = () => {
         <div className="hidden sm:flex flex-1 order-3" />
 
         {/* Mode Toggle */}
-        <div className="flex items-center bg-surface border border-gray-200 shadow rounded-lg order-2 sm:order-4 flex-shrink-0">
+        <div className="hidden sm:flex items-center bg-surface border border-gray-200 shadow rounded-lg order-4 flex-shrink-0">
           <button
             onClick={() => setMode("table")}
             className={`flex items-center gap-2 px-3 sm:px-5 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -324,50 +339,78 @@ const Page = () => {
       {/* Grid Mode */}
       {!loading && !error && accounts.length > 0 && mode === "grid" && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {accounts.map((account) => (
-              <div
-                key={account.id}
-                onClick={() =>
-                  router.push(`/app/settings/akun-keuangan/${account.id}`)
-                }
-                className="bg-surface border border-gray-200 shadow rounded-xl p-4 sm:p-5 hover:shadow-md transition-shadow cursor-pointer"
-              >
-                <div className="flex justify-between items-start mb-3">
-                  <h3 className="font-semibold text-gray-800 text-base sm:text-lg truncate pr-2">
-                    {account.name}
-                  </h3>
-                  {getAccountTypeBadge(account.type, "text-xs")}
-                </div>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500 text-xs sm:text-sm">
-                      Saldo Awal
-                    </span>
-                    <span className="font-medium text-gray-700 text-xs sm:text-sm">
-                      {formatRupiah(account.initial_balance)}
-                    </span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {accounts.map((account) => {
+              const diff =
+                Number(account.current_balance) -
+                Number(account.initial_balance);
+              const isPositive = diff > 0;
+              const isNegative = diff < 0;
+              const formattedDiff = isPositive
+                ? `+${formatRupiah(diff)}`
+                : isNegative
+                  ? `-${formatRupiah(Math.abs(diff))}`
+                  : formatRupiah(0);
+
+              return (
+                <div
+                  key={account.id}
+                  onClick={() =>
+                    router.push(`/app/settings/akun-keuangan/${account.id}`)
+                  }
+                  className="group relative overflow-hidden bg-surface border border-gray-300/80 rounded-2xl p-5 cursor-pointer transition-all duration-300 hover:shadow-md hover:border-secondary/30"
+                >
+                  {/* Header */}
+                  <div className="relative flex items-start justify-between gap-3 mb-6">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className={`flex-shrink-0 w-8 h-8 rounded-xl ${account.type == "cash" ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"} flex items-center justify-center`}
+                      >
+                        <FaWallet />
+                      </div>
+
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-gray-800 text-base truncate group-hover:text-secondary transition-colors">
+                          {account.name}
+                        </h3>
+                      </div>
+                    </div>
+
+                    <div className="flex-shrink-0">
+                      {getAccountTypeBadge(account.type, "text-xs")}
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500 text-xs sm:text-sm">
+
+                  {/* balance */}
+                  <div className="relative">
+                    <p className="text-xs font-medium text-gray-600 mb-1">
                       Saldo Saat Ini
-                    </span>
-                    <span className="font-semibold text-secondary text-xs sm:text-sm">
-                      {formatCurrentBalance(
-                        account.current_balance,
-                        account.initial_balance,
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex justify-between pt-2 border-t border-gray-100">
-                    <span className="text-gray-400 text-xs">
-                      {formatDate(account.created_at)}
-                    </span>
+                    </p>
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-xl sm:text-2xl font-bold tracking-tight text-gray-800">
+                        {formatRupiah(account.current_balance)}
+                      </p>
+                    </div>
+                    {diff !== 0 && (
+                      <p
+                        className={`text-xs ${
+                          isPositive
+                            ? "text-green-600"
+                            : isNegative
+                              ? "text-red-600"
+                              : "text-gray-500"
+                        }`}
+                      >
+                        {formattedDiff}{" "}
+                        <span className="text-gray-600">dari saldo awal</span>
+                      </p>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
+
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}

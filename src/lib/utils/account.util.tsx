@@ -38,7 +38,7 @@ export const formatCurrentBalance = (current: number, initial: number) => {
   const diff = current - initial;
   const formatted = formatRupiah(current);
   if (diff > 0) {
-    return <span className="text-green-600 font-semibold">+{formatted}</span>;
+    return <span className="text-green-600 font-semibold">{formatted}</span>;
   } else if (diff < 0) {
     return <span className="text-red-600 font-semibold">{formatted}</span>;
   }
